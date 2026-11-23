@@ -1,0 +1,209 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.invalid/skills/literature-translator/translation_schema.json",
+  "title": "literature-translator result schema",
+  "description": "Schema for the literature-translator Skill: glossary entries, aligned paragraph pairs, and the top-level result.json that carries evidence and uncertainty for verifiable academic translation.",
+  "definitions": {
+    "glossaryEntry": {
+      "type": "object",
+      "required": ["term", "translation", "status"],
+      "properties": {
+        "term": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact source surface form (case-sensitive for acronyms/formulas; case-insensitive for plain words)."
+        },
+        "translation": {
+          "type": "string",
+          "description": "The ONLY allowed translation when status=locked. May equal 'term' for formulas/proper nouns kept untranslated."
+        },
+        "variants": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Other source surface forms that map to the SAME translation."
+        },
+        "context": {
+          "type": "string",
+          "description": "A short source snippet showing the term in use, for disambiguation."
+        },
+        "first_location": {
+          "type": "string",
+          "description": "First source paragraph id where the term appears, e.g. P0002."
+        },
+        "domain": {
+          "type": "string",
+          "description": "Subject domain the entry belongs to."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["locked", "pending", "uncertain"],
+          "description": "locked = enforce everywhere; pending = candidate not yet used; uncertain = translation uncertain and must be flagged in output."
+        },
+        "note": {
+          "type": "string",
+          "description": "Rationale for the chosen translation (e.g. standard translation in the field, kept as formula)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "protectedToken": {
+      "type": "object",
+      "required": ["id", "kind", "text"],
+      "properties": {
+        "id": {"type": "string", "description": "Placeholder id, e.g. NUMBER_0003, UNIT_0005, CITATION_0002, REF_0001, FORMULA_0001."},
+        "kind": {"type": "string", "enum": ["number", "unit", "citation", "ref", "formula"]},
+        "text": {"type": "string", "description": "The verbatim source surface to preserve."},
+        "start": {"type": "integer", "description": "Character offset in the source text."},
+        "end": {"type": "integer", "description": "Character offset (exclusive) in the source text."}
+      },
+      "additionalProperties": true
+    },
+    "uncertainty": {
+      "type": "object",
+      "required": ["paragraph_id", "span", "reason", "action"],
+      "properties": {
+        "paragraph_id": {"type": "string", "description": "Source paragraph id, e.g. P0006."},
+        "span": {"type": "string", "description": "The exact source text span that is uncertain (may be empty for whole-paragraph uncertainty)."},
+        "reason": {"type": "string", "description": "Why it is uncertain: OCR noise, unreadable formula image, ambiguous term, truncated text, conflicting source."},
+        "action": {"type": "string", "enum": ["flagged_only", "left_untranslated", "literal_translation", "needs_human"], "description": "What was done about it."},
+        "translation_if_any": {"type": "string", "description": "The translation that was still produced, if any."}
+      },
+      "additionalProperties": true
+    },
+    "alignedParagraph": {
+      "type": "object",
+      "required": ["source_id", "target_id", "source_text", "target_text", "source_kind"],
+      "properties": {
+        "source_id": {"type": "string", "description": "Source paragraph id, e.g. P0004."},
+        "target_id": {"type": "string", "description": "Target paragraph id; must equal source_id for 1:1 alignment."},
+        "source_kind": {"type": "string", "enum": ["heading", "body", "caption", "formula", "table", "reference"]},
+        "source_text": {"type": "string"},
+        "target_text": {"type": "string"},
+        "source_location": {
+          "type": "object",
+          "properties": {
+            "page": {"type": "integer"},
+            "start_line": {"type": "integer"},
+            "end_line": {"type": "integer"}
+          },
+          "description": "Where the paragraph sits in the source (page and line span)."
+        },
+        "glossary_terms_used": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Glossary term surfaces used in this paragraph, with their locked translations applied."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this translation was chosen: glossary mapping, kept-verbatim tokens, structural notes."
+        },
+        "uncertain": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/uncertainty"},
+          "description": "Uncertain spans explicitly marked, never silently smoothed over."
+        }
+      },
+      "additionalProperties": true
+    },
+    "qaReport": {
+      "type": "object",
+      "properties": {
+        "source_paragraph_count": {"type": "integer"},
+        "target_paragraph_count": {"type": "integer"},
+        "alignment": {
+          "type": "object",
+          "properties": {
+            "missing_target": {"type": "array", "items": {"type": "string"}},
+            "extra_target": {"type": "array", "items": {"type": "string"}},
+            "order_issues": {"type": "array"},
+            "duplicate_source_ids": {"type": "array", "items": {"type": "string"}},
+            "duplicate_target_ids": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {"type": "string", "description": "One of: term_drift, term_untranslated, term_missing_translation, paragraph_inventory, token_missing, number_drift, negation_possibly_dropped, qualifier_possibly_dropped."},
+              "paragraph_id": {"type": "string"},
+              "detail": {"type": "string"}
+            }
+          }
+        },
+        "term_consistency": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "term": {"type": "string"},
+              "canonical_translation": {"type": "string"},
+              "target_occurrences_of_canonical": {"type": "integer"}
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "error_count": {"type": "integer"},
+            "warning_count": {"type": "integer"},
+            "passed": {"type": "boolean"}
+          }
+        }
+      }
+    }
+  },
+  "type": "object",
+  "required": ["case_id", "status", "source", "glossary", "alignment", "uncertainties"],
+  "properties": {
+    "case_id": {"type": "string", "description": "Copied verbatim from /input/case.json."},
+    "status": {
+      "type": "string",
+      "enum": ["success", "partial", "failed"],
+      "description": "success = all paragraphs translated and QA passed; partial = some paragraphs/fields missing or QA warnings remain; failed = no usable output."
+    },
+    "task": {"type": "string", "description": "Short statement of the translation task performed."},
+    "source": {
+      "type": "object",
+      "required": ["file", "extraction_method"],
+      "properties": {
+        "file": {"type": "string", "description": "Material file path or name."},
+        "extraction_method": {"type": "string", "description": "native-text-layer | pdftotext | pymupdf | pypdf | pdfminer | ocr | manual."},
+        "language": {"type": "string"},
+        "paragraph_count": {"type": "integer"},
+        "page_count": {"type": "integer"},
+        "ocr": {"type": "boolean", "description": "True if the text layer came from OCR (all paragraphs are then low confidence)."}
+      }
+    },
+    "glossary": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/glossaryEntry"}
+    },
+    "alignment": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/alignedParagraph"}
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/uncertainty"},
+      "description": "Flat list of every uncertain span, in addition to being inline on each paragraph."
+    },
+    "qa": {"$ref": "#/definitions/qaReport"},
+    "protected_tokens": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/protectedToken"},
+      "description": "Inventory of numbers/units/citations/refs/formulas that were protected during translation."
+    },
+    "output_contract": {
+      "type": "object",
+      "description": "Every field required by /input/case.json output_contract, copied verbatim, in addition to the fields above.",
+      "additionalProperties": true
+    },
+    "change_log": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Ordered list of what was changed and why (for reproducibility and idempotent re-runs)."
+    }
+  },
+  "additionalProperties": true
+}

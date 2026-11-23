@@ -1,0 +1,113 @@
+{
+  "_instructions": "Copy this file, replace every __PLACEHOLDER__, duplicate the assertion block per claim, then DELETE this '_instructions' key before running `src/nanopub.py export`. Field semantics and enums are in schema/nanopub_schema.json; the extraction procedure is SKILL.md section 4.",
+  "schema_version": "1.0.0",
+  "case_id": "__CASE_ID_FROM_INPUT__",
+  "status": "__success_or_partial_or_failed__",
+  "generated_at": "__ISO8601_UTC__",
+  "sources": [
+    {
+      "source_id": "src-1",
+      "kind": "__paper_or_preprint_or_dataset_or_figure_or_supplement__",
+      "title": "__TITLE__",
+      "authors": ["__FAMILY_GIVEN__"],
+      "year": "__YEAR_INT_OR_NULL__",
+      "version": "__published_or_author-accepted_or_preprint-v1_or_v1_or_unknown__",
+      "identifiers": {
+        "doi": "__DOI_10xxxx_xxxx_OR_UNKNOWN__",
+        "pmid": "",
+        "pmcid": "",
+        "arxiv": "",
+        "url": ""
+      },
+      "container": {
+        "journal": "",
+        "publisher": "",
+        "volume": "",
+        "issue": "",
+        "pages": "",
+        "article_number": ""
+      },
+      "language": "__en__",
+      "license": "",
+      "retrieved_at": "",
+      "content_hash": "",
+      "status": "ok",
+      "note": ""
+    }
+  ],
+  "assertions": [
+    {
+      "assertion_id": "a1",
+      "text": "__ONE_SENTENCE_ONE_CLAIM_WITH_CONDITIONS_KEPT__",
+      "language": "en",
+      "source_text": "__VERBATIM_ORIGINAL_SENTENCE_THIS_CAME_FROM__",
+      "subject": {
+        "label": "__SUBJECT_LABEL__",
+        "type": "__gene_or_protein_or_drug_or_compound_or_disease_or_phenotype_or_cell_type_or_cell_line_or_organism_or_pathway_or_process_or_method_or_metric_or_dataset_or_model_or_other__",
+        "normalized": "__CANONICAL_FORM_OR_REPEAT_LABEL__"
+      },
+      "relation": "__increases_or_decreases_or_inhibits_or_causes_or_associated_with_or_greater_than_or_is_a_or_measured_as_or_...__",
+      "relation_type": "__causal_or_associative_or_comparative_or_definitional_or_quantitative_or_methodological__",
+      "direction": "__positive_or_negative_or_neutral_or_not_applicable__",
+      "polarity": "__affirmative_or_negated__",
+      "object": {
+        "label": "__OBJECT_LABEL__",
+        "type": "__ENTITY_TYPE__",
+        "normalized": "__CANONICAL_FORM_OR_REPEAT_LABEL__"
+      },
+      "quantifier": "__all_or_some_or_none_or_specific_or_not_stated__",
+      "conditions": [
+        {
+          "slot": "__organism_or_cell_line_or_dosage_or_exposure_or_time_or_temperature_or_context_or_comparator_or_setting_or_population_or_other__",
+          "value": "__QUALIFIER_VALUE__",
+          "verbatim": "__ORIGINAL_QUALIFIER_PHRASE_OPTIONAL__"
+        }
+      ],
+      "certainty": {
+        "level": "__reported_or_inferred_or_speculative__",
+        "basis": "__WHY_THIS_LEVEL__"
+      },
+      "decomposition": {
+        "method": "__direct_or_coordination_split_or_causal_split_or_condition_extraction__",
+        "note": "__WHAT_WAS_SPLIT_AND_WHY__"
+      },
+      "evidence_binding": {
+        "evidence_id": "e1",
+        "quote": "__MINIMAL_SUFFICIENT_FRAGMENT__",
+        "quote_type": "__verbatim_or_paraphrase_or_figure_description_or_table_description_or_equation__",
+        "location": {
+          "page": "__INT_OR_NULL__",
+          "section": "__RESULTS_ETC__",
+          "paragraph": "__INT_OR_NULL__",
+          "sentence": "__INT_OR_NULL__",
+          "figure": "__FIG_2B_OR_NULL__",
+          "table": "__TABLE_1_OR_NULL__",
+          "equation": "__EQ_3_OR_NULL__",
+          "pointer": "__HUMAN_POINTER_E_G_p3_Results_para2_sent1__",
+          "span": {
+            "start": "__CHAR_OFFSET_OR_NULL__",
+            "end": "__CHAR_OFFSET_OR_NULL__",
+            "text_file": "paper.txt"
+          }
+        },
+        "relation_to_assertion": "__direct_or_inferred_or_context__",
+        "sufficiency": {
+          "judgment": "__sufficient_or_partial_or_insufficient__",
+          "reason": "__REQUIRED_IF_NOT_SUFFICIENT_OR_NOT_DIRECT__",
+          "minimality_note": "__HOW_THE_QUOTE_WAS_MINIMIZED__"
+        }
+      },
+      "provenance": {
+        "source_id": "src-1",
+        "evidence_id": "e1",
+        "assertion_id": "a1",
+        "chain": ["a1", "e1", "src-1"]
+      },
+      "status": "__supported_or_unsupported_or_conflict_or_not_extractable__"
+    }
+  ],
+  "unreported": [],
+  "conflicts": [],
+  "uncertainty": [],
+  "change_log": []
+}

@@ -1,0 +1,418 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/nanopub_schema.json",
+  "title": "Nanopublication extraction schema (reading14)",
+  "description": "Schema for decomposing paper conclusions into individually falsifiable assertions, binding each assertion to a minimal sufficient evidence fragment with a pointable source location, and recording the full assertion->evidence->paper->author->year->version provenance chain. result.json is the export artifact; it must be valid UTF-8 JSON parseable without manual cleanup. Additional fields required by the case output_contract are allowed (additionalProperties=true) and must be merged in alongside these fields. Relation is a recommended closed vocabulary: out-of-vocabulary verbs are WARNINGS in src/nanopub.py (they require an explicit note), never silent hard failures.",
+  "type": "object",
+  "required": ["schema_version", "case_id", "status", "sources", "assertions"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0",
+      "description": "Version of this schema; bump when field semantics change."
+    },
+    "case_id": {
+      "type": "string",
+      "description": "Copied verbatim from /input/case.json."
+    },
+    "status": {
+      "$ref": "#/$defs/status"
+    },
+    "status_detail": {
+      "type": "string",
+      "description": "Human-readable reason when status is partial or failed."
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp of this export, e.g. 2026-11-23T12:00:00Z."
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/source"}
+    },
+    "assertions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/assertion"},
+      "description": "One entry per single claim. Never put a whole paragraph in one assertion.text."
+    },
+    "quality": {"$ref": "#/$defs/quality"},
+    "unreported": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/unreported"},
+      "description": "Things the paper does not report; never guessed, never written as facts."
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/conflict"},
+      "description": "Assertion<->evidence or within-source conflicts; both sides kept, no silent deletion."
+    },
+    "uncertainty": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/uncertainty"}
+    },
+    "change_log": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/change_entry"}
+    }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "enum": ["success", "partial", "failed"],
+      "description": "success=all required assertions extracted and validated; partial=some sources/assertions unusable but a usable subset exported; failed=no usable text/assertion."
+    },
+    "source_kind": {
+      "type": "string",
+      "enum": ["paper", "preprint", "dataset", "figure", "supplement"],
+      "description": "The kind of thing the evidence points into."
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the source: published, author-accepted, preprint-v1, v1, v2, ... Use 'unknown' when the version cannot be determined."
+    },
+    "source": {
+      "type": "object",
+      "required": ["source_id", "title", "authors", "year", "version", "identifiers"],
+      "additionalProperties": true,
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "description": "Unique short id inside this result, e.g. 'src-1' or a stable DOI prefix."
+        },
+        "kind": {"$ref": "#/$defs/source_kind"},
+        "title": {"type": "string", "description": "Paper title as published."},
+        "authors": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"},
+          "description": "Author names; preferred form 'FamilyName, GivenName'. Empty is an error: provenance needs at least one author."
+        },
+        "year": {
+          "type": ["integer", "null"],
+          "minimum": 1400,
+          "maximum": 2100,
+          "description": "Publication year; null only when genuinely unknown and then noted in note."
+        },
+        "version": {"$ref": "#/$defs/version"},
+        "identifiers": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "doi": {"type": "string", "description": "DOI, e.g. 10.1038/s41586-021-00000-0."},
+            "pmid": {"type": "string"},
+            "pmcid": {"type": "string"},
+            "arxiv": {"type": "string"},
+            "url": {"type": "string"},
+            "publisher_id": {"type": "string"}
+          },
+          "description": "At least one identifier required; DOI preferred. 'unknown' when none can be found (then note must say why)."
+        },
+        "container": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "journal": {"type": "string"},
+            "publisher": {"type": "string"},
+            "volume": {"type": "string"},
+            "issue": {"type": "string"},
+            "pages": {"type": "string"},
+            "article_number": {"type": "string"}
+          }
+        },
+        "language": {"type": "string"},
+        "license": {"type": "string"},
+        "retrieved_at": {"type": "string"},
+        "content_hash": {"type": "string", "description": "Optional sha256 of the exact text file the quotes were taken from; enables repeatability."},
+        "status": {"type": "string", "enum": ["ok", "missing", "unreachable", "unparseable"], "default": "ok"},
+        "note": {"type": "string"}
+      }
+    },
+    "entity_type": {
+      "type": "string",
+      "enum": ["gene", "protein", "drug", "compound", "disease", "phenotype", "cell_type", "cell_line", "organism", "pathway", "process", "method", "metric", "dataset", "model", "other"],
+      "description": "Coarse type of the assertion endpoints. 'other' allowed but note should give a finer label."
+    },
+    "entity_ref": {
+      "type": "object",
+      "required": ["label"],
+      "additionalProperties": true,
+      "properties": {
+        "label": {"type": "string", "description": "Surface form as used in the assertion, e.g. 'BRCA1', 'tumor growth'."},
+        "type": {"$ref": "#/$defs/entity_type"},
+        "normalized": {"type": "string", "description": "Canonical/normalized form (uniprot gene symbol, MeSH term, etc.) when available; otherwise repeat the label."}
+      }
+    },
+    "relation_type": {
+      "type": "string",
+      "enum": ["causal", "associative", "comparative", "definitional", "quantitative", "methodological"],
+      "description": "Class of the relation. causal=one thing changes another (sign captured by relation verb + direction); associative=co-occurring/predictive but no causal claim; comparative=greater/less/equal/different; definitional=is-a/part-of/expresses/encodes/binds; quantitative=measured value; methodological=evaluated/detected/treated by."
+    },
+    "relation": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,39}$",
+      "description": "Lowercase snake_case predicate verb from the recommended vocabulary (see $defs/relation_vocab list). Out-of-vocabulary verbs are a WARNING in src/nanopub.py and require a decomposition.note explaining the mapping.",
+      "examples": ["increases", "decreases", "causes", "leads_to", "inhibits", "promotes", "induces", "activates", "suppresses", "blocks", "reduces", "requires", "mediates", "modulates", "regulates", "depends_on", "associated_with", "correlates_with", "predicts", "greater_than", "less_than", "equivalent_to", "differs_from", "is_a", "part_of", "expresses", "encodes", "binds", "localizes_to", "interacts_with", "has_property", "measured_as", "has_value", "evaluated_by", "detected_by", "treated_with"]
+    },
+    "polarity": {
+      "type": "string",
+      "enum": ["affirmative", "negated"],
+      "description": "affirmative = the relation holds; negated = the paper says the relation does NOT hold (e.g. 'X did not increase Y')."
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["positive", "negative", "neutral", "not_applicable"],
+      "description": "Sign of the effect. positive for increases/promotes/greater_than; negative for decreases/inhibits/less_than; neutral for associative/definitional/quantitative/methodological."
+    },
+    "quantifier": {
+      "type": "string",
+      "enum": ["all", "some", "none", "specific", "not_stated", "none_reported"],
+      "description": "How generally the claim is stated. Use 'specific' for a particular dose/sample/cohort; 'not_stated' when the paper does not quantify."
+    },
+    "condition_slot": {
+      "type": "string",
+      "enum": ["organism", "cell_line", "dosage", "exposure", "time", "temperature", "context", "comparator", "setting", "population", "other"],
+      "description": "The qualifier slot the condition fills; keeps scope/qualifiers attached to the assertion instead of dropping them."
+    },
+    "condition": {
+      "type": "object",
+      "required": ["slot", "value"],
+      "additionalProperties": true,
+      "properties": {
+        "slot": {"$ref": "#/$defs/condition_slot"},
+        "value": {"type": "string"},
+        "verbatim": {"type": "string", "description": "The original qualifier phrase when the value is a paraphrase."}
+      }
+    },
+    "certainty_level": {
+      "type": "string",
+      "enum": ["reported", "inferred", "speculative"],
+      "description": "reported = stated as a finding; inferred = read off data/figures or composed from multiple statements; speculative = hedged (may/might/suggests)."
+    },
+    "certainty": {
+      "type": "object",
+      "required": ["level"],
+      "additionalProperties": true,
+      "properties": {
+        "level": {"$ref": "#/$defs/certainty_level"},
+        "basis": {"type": "string", "description": "Why this level was chosen, e.g. the verbatim sentence or the figure read-off."}
+      }
+    },
+    "decomposition_method": {
+      "type": "string",
+      "enum": ["direct", "coordination_split", "causal_split", "condition_extraction"],
+      "description": "direct=one clause already; coordination_split=split a compound subject/object/predicate; causal_split=split a chained cause->effect; condition_extraction=lifted qualifiers into conditions."
+    },
+    "decomposition": {
+      "type": "object",
+      "required": ["method"],
+      "additionalProperties": true,
+      "properties": {
+        "method": {"$ref": "#/$defs/decomposition_method"},
+        "note": {"type": "string", "description": "What was split and why; required whenever method is not 'direct' or relation is out-of-vocabulary."}
+      }
+    },
+    "quote_type": {
+      "type": "string",
+      "enum": ["verbatim", "paraphrase", "figure_description", "table_description", "equation"],
+      "description": "verbatim=exact text from the source; paraphrase=restated (must be flagged, weaker); figure_description/table_description/equation=structured description when the evidence is not running text."
+    },
+    "relation_to_assertion": {
+      "type": "string",
+      "enum": ["direct", "inferred", "context"],
+      "description": "direct=quote states the relation; inferred=quote gives data/stats from which the assertion is read off (must give sufficiency.reason); context=quote only gives background, NOT support."
+    },
+    "sufficiency_judgment": {
+      "type": "string",
+      "enum": ["sufficient", "partial", "insufficient"],
+      "description": "sufficient=quote alone supports the assertion; partial=quote supports part of it (conditions/comparator missing); insufficient=quote does not support the assertion."
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "page": {"type": ["integer", "null"], "description": "PDF page number when the source has pages; null when not applicable (e.g. JATS-only input)."},
+        "section": {"type": "string", "description": "Section heading, e.g. 'Results'."},
+        "paragraph": {"type": ["integer", "null"], "description": "1-based paragraph index within the section or document."},
+        "sentence": {"type": ["integer", "null"], "description": "1-based sentence index within the paragraph."},
+        "figure": {"type": ["string", "null"], "description": "e.g. 'Fig. 2B'. Use when evidence is a figure; then quote_type must be figure_description."},
+        "table": {"type": ["string", "null"], "description": "e.g. 'Table 1'."},
+        "equation": {"type": ["string", "null"], "description": "e.g. 'Eq. 3'."},
+        "pointer": {"type": "string", "description": "Free-text, unambiguous human pointer, e.g. 'p.3, Results, para 2, sent 1' or 'Fig. 2B, right panel'."},
+        "span": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "start": {"type": "integer", "description": "0-based char offset of the quote in the extracted text file."},
+            "end": {"type": "integer"},
+            "text_file": {"type": "string", "description": "Path/name of the text file the offsets refer to."}
+          }
+        }
+      }
+    },
+    "evidence_binding": {
+      "type": "object",
+      "required": ["evidence_id", "quote", "quote_type", "location", "relation_to_assertion", "sufficiency"],
+      "additionalProperties": true,
+      "properties": {
+        "evidence_id": {"type": "string", "description": "Unique id, e.g. 'e1'. Referenced by provenance.evidence_id."},
+        "quote": {"type": "string", "description": "Minimal sufficient fragment: the shortest verbatim span that still supports the relation. Not the whole paragraph; must be grep-able in the extracted text when quote_type=verbatim."},
+        "quote_type": {"$ref": "#/$defs/quote_type"},
+        "location": {"$ref": "#/$defs/location"},
+        "relation_to_assertion": {"$ref": "#/$defs/relation_to_assertion"},
+        "sufficiency": {
+          "type": "object",
+          "required": ["judgment"],
+          "additionalProperties": true,
+          "properties": {
+            "judgment": {"$ref": "#/$defs/sufficiency_judgment"},
+            "reason": {"type": "string", "description": "Why the quote is/ is not sufficient; REQUIRED when judgment != sufficient or relation_to_assertion != direct."},
+            "minimality_note": {"type": "string", "description": "How the quote was minimized, e.g. 'trimmed to the clause carrying subject+verb+object'."}
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source_id", "evidence_id", "assertion_id", "chain"],
+      "additionalProperties": true,
+      "properties": {
+        "source_id": {"type": "string", "description": "Must exist in sources[]."},
+        "evidence_id": {"type": "string", "description": "Must equal the assertion's evidence_binding.evidence_id."},
+        "assertion_id": {"type": "string", "description": "Must equal the assertion's assertion_id."},
+        "chain": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {"type": "string"},
+          "description": "Exactly [assertion_id, evidence_id, source_id] in that order; verified by src/nanopub.py."
+        }
+      }
+    },
+    "assertion_status": {
+      "type": "string",
+      "enum": ["supported", "unsupported", "conflict", "not_extractable"],
+      "description": "supported=has sufficient binding; unsupported=no supporting fragment found (kept, not fabricated); conflict=assertion and evidence disagree (kept side by side); not_extractable=cannot be decomposed/read (e.g. no text layer, figure-only)."
+    },
+    "assertion": {
+      "type": "object",
+      "required": ["assertion_id", "text", "subject", "relation", "relation_type", "object", "polarity", "direction", "conditions", "certainty", "decomposition", "evidence_binding", "provenance", "status"],
+      "additionalProperties": true,
+      "properties": {
+        "assertion_id": {"type": "string", "description": "Unique id, e.g. 'a1'."},
+        "text": {"type": "string", "description": "Normalized single claim, conditions kept in-line or in conditions[]. One subject, one relation, one object; no compound coordination, no causal chaining."},
+        "language": {"type": "string", "description": "BCP-47, e.g. 'en'."},
+        "source_text": {"type": "string", "description": "The verbatim original sentence(s) this assertion was decomposed from; used for the conditions-preserved and coordination checks."},
+        "subject": {"$ref": "#/$defs/entity_ref"},
+        "relation": {"$ref": "#/$defs/relation"},
+        "relation_type": {"$ref": "#/$defs/relation_type"},
+        "direction": {"$ref": "#/$defs/direction"},
+        "polarity": {"$ref": "#/$defs/polarity"},
+        "object": {"$ref": "#/$defs/entity_ref"},
+        "quantifier": {"$ref": "#/$defs/quantifier", "default": "not_stated"},
+        "conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}, "default": []},
+        "certainty": {"$ref": "#/$defs/certainty"},
+        "decomposition": {"$ref": "#/$defs/decomposition"},
+        "evidence_binding": {"$ref": "#/$defs/evidence_binding"},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "status": {"$ref": "#/$defs/assertion_status"}
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "summary": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "sources": {"type": "integer"},
+            "assertions": {"type": "integer"},
+            "supported": {"type": "integer"},
+            "unsupported": {"type": "integer"},
+            "conflict": {"type": "integer"},
+            "not_extractable": {"type": "integer"},
+            "direct_evidence": {"type": "integer"},
+            "inferred_evidence": {"type": "integer"}
+          }
+        },
+        "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
+        "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}}
+      }
+    },
+    "check": {
+      "type": "object",
+      "required": ["id", "question", "name", "result"],
+      "additionalProperties": true,
+      "properties": {
+        "id": {"type": "string"},
+        "question": {"type": "string", "enum": ["split_fine", "bind_evidence", "trace_provenance", "machine_readable"], "description": "Which of the four challenge questions the check serves."},
+        "name": {"type": "string"},
+        "result": {"type": "string", "enum": ["pass", "warn", "fail"]},
+        "detail": {"type": "string"}
+      }
+    },
+    "issue": {
+      "type": "object",
+      "required": ["assertion_id", "issue_type", "detail"],
+      "additionalProperties": true,
+      "properties": {
+        "assertion_id": {"type": "string"},
+        "issue_type": {"type": "string", "enum": ["over_broad_assertion", "insufficient_evidence", "wrong_relation_type", "subject_confusion", "missing_source", "other"], "description": "The five rubric-named quality problems plus 'other'."},
+        "detail": {"type": "string"},
+        "fix": {"type": "string"}
+      }
+    },
+    "unreported": {
+      "type": "object",
+      "required": ["subject", "what_missing"],
+      "additionalProperties": true,
+      "properties": {
+        "subject": {"type": "string"},
+        "what_missing": {"type": "string"},
+        "note": {"type": "string"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["source_id", "quote"],
+      "additionalProperties": true,
+      "properties": {
+        "source_id": {"type": "string"},
+        "quote": {"type": "string"},
+        "location": {"$ref": "#/$defs/location"}
+      }
+    },
+    "conflict": {
+      "type": "object",
+      "required": ["subject", "side_a", "side_b", "note"],
+      "additionalProperties": true,
+      "properties": {
+        "subject": {"type": "string"},
+        "side_a": {"$ref": "#/$defs/evidence"},
+        "side_b": {"$ref": "#/$defs/evidence"},
+        "note": {"type": "string", "description": "Both sides kept; describe the disagreement, do not pick one silently."}
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "required": ["subject", "level"],
+      "additionalProperties": true,
+      "properties": {
+        "subject": {"type": "string"},
+        "level": {"type": "string", "enum": ["low", "medium", "high"]},
+        "note": {"type": "string"}
+      }
+    },
+    "change_entry": {
+      "type": "object",
+      "required": ["step", "action"],
+      "additionalProperties": true,
+      "properties": {
+        "step": {"type": "string"},
+        "action": {"type": "string"},
+        "reason": {"type": "string"}
+      }
+    }
+  }
+}

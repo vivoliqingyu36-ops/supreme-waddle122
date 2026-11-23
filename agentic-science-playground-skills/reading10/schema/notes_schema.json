@@ -1,0 +1,350 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/schemas/structured-paper-notes/notes_schema.json",
+  "title": "structured-paper-notes result.json",
+  "description": "文献总结与结构化笔记的结构化结果契约。论文卡片（研究问题/数据/方法/发现/局限/结论成立条件）、章节骨架与章节小结、知识点（含锚点）都要求能回到原文位置；缺失/不确定/冲突必须显式标注，不得编造。字段含义见 SKILL.md、README.md 与 checks/checklist.md。",
+  "type": "object",
+  "required": [
+    "case_id",
+    "schema_version",
+    "status",
+    "document",
+    "paper_card",
+    "sections",
+    "knowledge_points",
+    "evidence",
+    "uncertainty"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "case_id": { "type": "string", "description": "来自 /input/case.json 的 case_id，原样回填。" },
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "status": {
+      "type": "string",
+      "enum": ["success", "partial", "failed", "cannot_judge"],
+      "description": "运行状态。partial/failed/cannot_judge 必须同时在 limits 或 uncertainty 说明边界。"
+    },
+    "document": { "$ref": "#/definitions/document" },
+    "skeleton": {
+      "type": "array",
+      "description": "论文自身的论证主干：按原文顺序列出 section_id（对得上）。不得插入原文没有的章节。",
+      "items": {
+        "type": "object",
+        "required": ["section_id", "order"],
+        "properties": {
+          "section_id": { "type": "string" },
+          "order": { "type": "integer" }
+        }
+      }
+    },
+    "paper_card": { "$ref": "#/definitions/paperCard" },
+    "sections": {
+      "type": "array",
+      "description": "按原文章节逐节小结；每条小结都带 anchor。",
+      "items": { "$ref": "#/definitions/section" }
+    },
+    "knowledge_points": {
+      "type": "array",
+      "description": "可检索知识点：术语/缩写/同义表述归一、去重、冲突显式标注。",
+      "items": { "$ref": "#/definitions/knowledgePoint" }
+    },
+    "evidence": { "$ref": "#/definitions/evidenceSummary" },
+    "uncertainty": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/uncertainty" }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "limits": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "部分完成/失败时的边界说明。"
+    },
+    "change_log": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "重复运行差异或人工修正记录。"
+    }
+  },
+  "definitions": {
+    "document": {
+      "type": "object",
+      "required": ["file", "page_count"],
+      "properties": {
+        "file": { "type": "string" },
+        "title": { "type": ["string", "null"] },
+        "authors": { "type": ["array", "null"], "items": { "type": "string" } },
+        "doi": { "type": ["string", "null"] },
+        "year": { "type": ["integer", "null"] },
+        "journal": { "type": ["string", "null"] },
+        "page_count": { "type": "integer", "minimum": 0 },
+        "language": { "type": "string", "enum": ["zh", "en", "mixed", "other"] },
+        "tool_path": {
+          "type": "string",
+          "enum": ["pdf-text-tool", "pdf-render-tool+ocr-tool", "mixed", "external", "manual"],
+          "description": "实际使用的文本获取路径。"
+        }
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "description": "一条笔记的原文定位。locator 是人类可读串；结构化字段供脚本机械核验。quote 必须是原文逐字片段（NFKC/空白折叠后比对），不得改写。",
+      "required": ["locator", "section_id", "page"],
+      "properties": {
+        "locator": {
+          "type": "string",
+          "description": "人类可读定位，例：'s3 §2.3 ¶2 · p.7 · Fig.2'。与结构化字段一致。"
+        },
+        "section_id": { "type": ["string", "null"] },
+        "page": { "type": ["integer", "null"], "minimum": 1 },
+        "para": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "页码/章节内的段落序号（1-based）。"
+        },
+        "block_id": { "type": ["string", "null"] },
+        "figure_id": { "type": ["string", "null"] },
+        "table_id": { "type": ["string", "null"] },
+        "equation_id": { "type": ["string", "null"] },
+        "quote": { "type": ["string", "null"], "description": "原文逐字片段，用于回链核验。" },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low", "unknown"] },
+        "source": { "type": "string", "enum": ["text_layer", "ocr", "manual", "inferred"] }
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "required": ["kind", "detail"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["unreadable", "not_reported", "conflict", "ambiguous", "heuristic_guess", "missing_data", "unverified", "other"]
+        },
+        "detail": { "type": "string" },
+        "page": { "type": ["integer", "null"] },
+        "block_id": { "type": ["string", "null"] },
+        "section_id": { "type": ["string", "null"] },
+        "anchor": { "$ref": "#/definitions/anchor" }
+      }
+    },
+    "field": {
+      "type": "object",
+      "description": "论文卡片通用字段：status 判定是否有报告；items 承载多条具体内容，每条必须带 anchor。",
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string", "enum": ["reported", "partial", "not_reported", "conflict"] },
+        "value": { "type": ["string", "null"] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["text", "anchor"],
+            "properties": {
+              "text": { "type": "string" },
+              "anchor": { "$ref": "#/definitions/anchor" }
+            }
+          }
+        },
+        "anchor": { "$ref": "#/definitions/anchor" },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "methodField": {
+      "type": "object",
+      "description": "方法字段：components 承载具体方法/设定/参数，conditions 承载方法成立的前提条件（方法条件）。",
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string", "enum": ["reported", "partial", "not_reported", "conflict"] },
+        "value": { "type": ["string", "null"] },
+        "anchor": { "$ref": "#/definitions/anchor" },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "anchor"],
+            "properties": {
+              "name": { "type": "string" },
+              "detail": { "type": ["string", "null"] },
+              "anchor": { "$ref": "#/definitions/anchor" }
+            }
+          }
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["condition", "anchor"],
+            "properties": {
+              "condition": { "type": "string" },
+              "anchor": { "$ref": "#/definitions/anchor" }
+            }
+          }
+        },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "findingsField": {
+      "type": "object",
+      "description": "主要发现字段：每条 finding 都要有 statement 与 anchor，并可引用 conditions 里的前提条件。",
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string", "enum": ["reported", "partial", "not_reported", "conflict"] },
+        "value": { "type": ["string", "null"] },
+        "anchor": { "$ref": "#/definitions/anchor" },
+        "items": { "type": "array", "items": { "$ref": "#/definitions/finding" } },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["finding_id", "statement", "anchor"],
+      "properties": {
+        "finding_id": { "type": "string" },
+        "statement": { "type": "string" },
+        "direction": { "type": "string", "enum": ["positive", "negative", "null", "mixed"] },
+        "effect_size": { "type": ["string", "null"] },
+        "statistics": { "type": ["string", "null"] },
+        "anchor": { "$ref": "#/definitions/anchor" },
+        "condition_ids": { "type": "array", "items": { "type": "string" } },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "conditionsField": {
+      "type": "object",
+      "description": "结论成立的前提/条件字段：items 为具体前提，applies_to 指向依赖该前提的 finding_id。",
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string", "enum": ["reported", "partial", "not_reported", "conflict"] },
+        "value": { "type": ["string", "null"] },
+        "anchor": { "$ref": "#/definitions/anchor" },
+        "items": { "type": "array", "items": { "$ref": "#/definitions/condition" } },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "required": ["condition_id", "premise", "anchor"],
+      "properties": {
+        "condition_id": { "type": "string" },
+        "premise": { "type": "string" },
+        "scope": { "type": ["string", "null"] },
+        "applies_to": { "type": "array", "items": { "type": "string" } },
+        "anchor": { "$ref": "#/definitions/anchor" },
+        "status": { "type": "string", "enum": ["reported", "inferred", "not_reported"] }
+      }
+    },
+    "paperCard": {
+      "type": "object",
+      "description": "统一字段化的论文卡片，使多篇论文可并排比较。",
+      "required": ["research_question", "data", "method", "findings", "limitations", "conditions"],
+      "properties": {
+        "paper_id": { "type": "string" },
+        "research_question": { "$ref": "#/definitions/field" },
+        "data": { "$ref": "#/definitions/field" },
+        "method": { "$ref": "#/definitions/methodField" },
+        "findings": { "$ref": "#/definitions/findingsField" },
+        "conditions": { "$ref": "#/definitions/conditionsField" },
+        "limitations": { "$ref": "#/definitions/field" }
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": ["section_id", "title", "level", "order", "summary"],
+      "properties": {
+        "section_id": { "type": "string" },
+        "number": { "type": ["string", "null"] },
+        "title": { "type": "string", "description": "论文自身章节标题；不得改写为通用模板名。" },
+        "level": { "type": "integer", "minimum": 1 },
+        "parent_section_id": { "type": ["string", "null"] },
+        "heading_block_id": { "type": ["string", "null"] },
+        "start_page": { "type": ["integer", "null"] },
+        "end_page": { "type": ["integer", "null"] },
+        "order": { "type": "integer" },
+        "purpose": { "type": "string", "description": "本节在论证中的作用（一句话）。" },
+        "follows_from": { "type": ["string", "null"], "description": "承接关系：上一节 section_id。" },
+        "leads_to": { "type": ["string", "null"], "description": "承接关系：下一节 section_id。" },
+        "role": { "type": "string", "enum": ["background", "problem", "method", "results", "discussion", "conclusion", "limitations", "other"] },
+        "summary": { "$ref": "#/definitions/sectionSummary" },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "sectionSummary": {
+      "type": "object",
+      "required": ["anchor"],
+      "properties": {
+        "anchor": { "$ref": "#/definitions/anchor" },
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["claim_id", "text", "anchor"],
+            "properties": {
+              "claim_id": { "type": "string" },
+              "text": { "type": "string" },
+              "anchor": { "$ref": "#/definitions/anchor" }
+            }
+          }
+        },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "knowledgePoint": {
+      "type": "object",
+      "required": ["kp_id", "term", "type", "anchor"],
+      "properties": {
+        "kp_id": { "type": "string" },
+        "term": { "type": "string", "description": "原文出现的术语/变量/方法/结论条目。" },
+        "canonical": { "type": ["string", "null"], "description": "规范写法（展开缩写后的首选形式）。" },
+        "abbreviations": { "type": "array", "items": { "type": "string" } },
+        "synonyms": { "type": "array", "items": { "type": "string" } },
+        "normalized_term": { "type": "string", "description": "检索键：小写、空白折叠、去分隔标点。" },
+        "type": { "type": "string", "enum": ["concept", "variable", "method", "claim", "condition", "abbreviation", "dataset", "other"] },
+        "definition": { "type": ["string", "null"] },
+        "value": { "type": ["string", "null"] },
+        "unit": { "type": ["string", "null"] },
+        "anchor": { "$ref": "#/definitions/anchor" },
+        "relations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["target", "relation"],
+            "properties": {
+              "target": { "type": "string", "description": "另一条 kp_id。" },
+              "relation": { "type": "string", "description": "is_abbreviation_of / measured_by / operationalizes / supports / contradicts / instance_of 等。" }
+            }
+          }
+        },
+        "merged_from": { "type": "array", "items": { "type": "string" } },
+        "conflict_with": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["reported", "inferred", "conflict", "uncertain"] },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "evidenceSummary": {
+      "type": "object",
+      "description": "证据覆盖对账：锚点覆盖率必须能机械计算。",
+      "properties": {
+        "coverage": {
+          "type": "object",
+          "properties": {
+            "sections_total": { "type": "integer" },
+            "sections_anchored": { "type": "integer" },
+            "fields_total": { "type": "integer" },
+            "fields_anchored": { "type": "integer" },
+            "kps_total": { "type": "integer" },
+            "kps_anchored": { "type": "integer" }
+          }
+        },
+        "unverifiable": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "reason": { "type": "string" },
+              "anchor": { "$ref": "#/definitions/anchor" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
