@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/schemas/academic-pdf-parser/span.schema.json",
+  "title": "academic-pdf-parser span input (canonical)",
+  "description": "src/pdf_parse.py 的输入契约。任何带坐标的文字抽取结果（pdf-text-tool 的 span 输出、OCR 的 word box、其它抽取器）都应归一化为此格式后再喂给脚本。坐标单位 pt，原点左上角。",
+  "type": "object",
+  "required": ["pages"],
+  "additionalProperties": true,
+  "properties": {
+    "source": { "type": "string", "description": "源文件名或 URI" },
+    "unit": { "type": "string", "enum": ["pt", "px", "mm"], "default": "pt" },
+    "origin": { "type": "string", "enum": ["top-left", "bottom-left"], "default": "top-left" },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["page", "spans"],
+        "properties": {
+          "page": { "type": "integer", "description": "1-based 物理页码（阅读顺序页码单独记录）" },
+          "width": { "type": "number" },
+          "height": { "type": "number" },
+          "rotate": { "type": "integer", "enum": [0, 90, 180, 270] },
+          "spans": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/span" }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "span": {
+      "type": "object",
+      "required": ["text"],
+      "oneOf": [
+        { "required": ["x0", "y0", "x1", "y1"] },
+        { "required": ["x", "y", "w", "h"] }
+      ],
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "x0": { "type": "number" }, "y0": { "type": "number" },
+        "x1": { "type": "number" }, "y1": { "type": "number" },
+        "x": { "type": "number" }, "y": { "type": "number" },
+        "w": { "type": "number" }, "h": { "type": "number" },
+        "font": { "type": "string" },
+        "size": { "type": "number", "description": "字号（pt），用于标题/公式/脚注判定" },
+        "style": { "type": "string", "description": "bold / italic / normal / 组合" },
+        "weight": { "type": "number" }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+% EXAMPLE — 最小可编译示例，演示本 Skill 的完整接口。
+% 运行：cd example && python3 ../src/build.py --workdir . --main main.tex
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}   % 版式
+\usepackage{amsmath}                  % 公式
+\usepackage{booktabs}                 % 三线表
+\usepackage[hidelinks]{hyperref}      % 交叉引用
+
+\title{A minimal reproducible example}
+\author{Example Author}
+\date{2026-11-23}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}\label{sec:intro}
+This section introduces the problem and cites a reference~\cite{knuth1984texbook}.
+
+\begin{equation}\label{eq:energy}
+E = mc^{2}
+\end{equation}
+Equation~\eqref{eq:energy} is referenced from Section~\ref{sec:intro}.
+
+\section{Results}\label{sec:results}
+\begin{table}[htbp]
+  \centering
+  \caption{Example measurements (source: fabricated for the example only).}
+  \label{tab:example}
+  \begin{tabular}{lcc}
+    \toprule
+    Quantity & Value & Unit \\
+    \midrule
+    $m$  & 1.0  & kg \\
+    $c$  & 3.0e8 & m/s \\
+    $E$  & 9.0e16 & J \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\bibliographystyle{plain}
+\bibliography{refs}
+\end{document}

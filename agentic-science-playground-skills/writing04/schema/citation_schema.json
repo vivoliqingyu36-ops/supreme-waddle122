@@ -1,0 +1,253 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.org/skill/citation-manager/citation_schema.json",
+  "title": "CitationManager 结构化产物 Schema",
+  "description": "参考文献记录（ReferenceRecord）与论断→来源映射（ClaimSourceMapping）的统一 schema。用于 /app/output/source_map.json、/app/output/refs_synced.json 与 result.json 的 citation_* 字段。所有 evidence 字段均为可回溯定位，不允许无来源的断言。",
+  "type": "object",
+  "required": ["schema_version", "references", "claim_mappings"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "本 schema 版本；升版时同步修改 SKILL.md 中的引用。"
+    },
+    "case_id": {
+      "type": "string",
+      "description": "来自 /input/case.json 的案例标识。"
+    },
+    "references": {
+      "type": "array",
+      "description": "去重后的文献表，按目标规范排序（顺序编码制为正文首次出现顺序）。",
+      "items": { "$ref": "#/definitions/ReferenceRecord" }
+    },
+    "claim_mappings": {
+      "type": "array",
+      "description": "逐句论断→引用映射；每个需要来源支撑的句子一条。",
+      "items": { "$ref": "#/definitions/ClaimSourceMapping" }
+    },
+    "dedup_decisions": {
+      "type": "array",
+      "description": "去重决策记录（含合并与禁止合并），来自 src/refs.py dedup 输出。",
+      "items": { "$ref": "#/definitions/DedupDecision" }
+    },
+    "issues": {
+      "type": "array",
+      "description": "校验问题清单（缺条目、编号越界、未引用条目、编造/错配等）。",
+      "items": { "$ref": "#/definitions/CitationIssueReport" }
+    }
+  },
+  "definitions": {
+    "Author": {
+      "type": "object",
+      "description": "作者。中文姓名 family 放姓、given 放名或二者合写在 family。",
+      "properties": {
+        "family": { "type": "string" },
+        "given": { "type": "string" },
+        "role": { "type": "string", "enum": ["author", "editor", "translator", "corresponding"] }
+      },
+      "required": ["family"]
+    },
+    "IdentifierSet": {
+      "type": "object",
+      "description": "除 DOI 外的其他可定位标识；缺项省略或为 null。",
+      "properties": {
+        "pmid": { "type": ["string", "null"] },
+        "pmcid": { "type": ["string", "null"] },
+        "arxiv": { "type": ["string", "null"] },
+        "isbn": { "type": ["string", "null"] },
+        "cnki": { "type": ["string", "null"] },
+        "wos": { "type": ["string", "null"] },
+        "scopus": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "VerificationRecord": {
+      "type": "object",
+      "description": "存在性核验结果。status=verified 才可当作真实文献；其余必须标注。",
+      "required": ["status", "method"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["verified", "unverified", "fabricated", "ambiguous", "unresolved"],
+          "description": "verified=已核实存在且元数据一致；unverified=未核实；fabricated=疑似编造；ambiguous=同名歧义；unresolved=DOI/检索失败待人工。"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["doi_resolution", "database_search", "original_document_evidence", "none"],
+          "description": "doi_resolution=doi.org/Crossref 解析；database_search=数据库检索比对；original_document_evidence=材料内原文对照；none=未核验。"
+        },
+        "doi_queried": { "type": ["string", "null"] },
+        "retrieved": {
+          "type": "object",
+          "description": "解析/检索返回的元数据快照（用于比对题名、作者、年份、出处是否与条目一致）。",
+          "properties": {
+            "title": { "type": ["string", "null"] },
+            "authors": { "type": ["array", "null"], "items": { "type": "string" } },
+            "year": { "type": ["string", "null"] },
+            "venue": { "type": ["string", "null"] },
+            "volume": { "type": ["string", "null"] },
+            "pages": { "type": ["string", "null"] }
+          },
+          "additionalProperties": true
+        },
+        "field_match": {
+          "type": "string",
+          "enum": ["exact", "partial", "mismatch", "unknown"],
+          "description": "条目元数据与解析结果的字段一致性：exact=关键字段一致；partial=部分一致；mismatch=不一致（错配）；unknown=无法比较。"
+        },
+        "resolved_at": { "type": ["string", "null"], "description": "ISO 8601 时间戳。" },
+        "note": { "type": ["string", "null"] }
+      }
+    },
+    "ReferenceRecord": {
+      "type": "object",
+      "description": "去重后的单条参考文献。key 为全文唯一的稳定键；provenance 记录合并来源。",
+      "required": ["key", "title"],
+      "properties": {
+        "key": { "type": "string" },
+        "title": { "type": "string" },
+        "title_original": {
+          "type": ["string", "null"],
+          "description": "原语言题名（如中文题名），与 title 分别保存以支持中英混排与去重。"
+        },
+        "language": { "type": "string", "enum": ["zh", "en", "other", "mixed"] },
+        "authors": { "type": "array", "items": { "$ref": "#/definitions/Author" } },
+        "year": { "type": ["string", "null"], "pattern": "^\\d{4}$" },
+        "type": {
+          "type": "string",
+          "enum": ["journal-article", "conference", "book", "book-chapter", "thesis", "report", "preprint", "web", "other"]
+        },
+        "venue": { "type": ["string", "null"] },
+        "volume": { "type": ["string", "null"] },
+        "issue": { "type": ["string", "null"] },
+        "pages": { "type": ["string", "null"] },
+        "article_number": { "type": ["string", "null"] },
+        "publisher": { "type": ["string", "null"] },
+        "doi": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] },
+        "identifiers": { "$ref": "#/definitions/IdentifierSet" },
+        "version": {
+          "type": "string",
+          "enum": ["preprint", "published", "unknown"],
+          "description": "预印本与正式版差异；合并时优先 published 为代表记录。"
+        },
+        "source_db": {
+          "type": ["string", "null"],
+          "description": "来源数据库/导出格式：BibTeX/RIS/EndNote/CNKI/Crossref/PubMed/手动。"
+        },
+        "provenance": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "合并前的原始记录标识（文件路径+条目 key），用于回溯。"
+        },
+        "merge_key": {
+          "type": "object",
+          "description": "可解释的去重键（DOI/题名/第一作者+年份/出处），对应 src/refs.py make_dedup_key。",
+          "properties": {
+            "doi_norm": { "type": "string" },
+            "title_norm": { "type": "string" },
+            "first_author_norm": { "type": "string" },
+            "year": { "type": "string" },
+            "venue_norm": { "type": "string" }
+          }
+        },
+        "verification": { "$ref": "#/definitions/VerificationRecord" }
+      }
+    },
+    "ClaimSourceMapping": {
+      "type": "object",
+      "description": "一条论断与其支撑来源的绑定。citation_keys 引用 ReferenceRecord.key；evidence_quote 必须来自被引文献原文。",
+      "required": ["claim_id", "claim_text", "location", "citation_keys"],
+      "properties": {
+        "claim_id": { "type": "string", "description": "形如 claim-001 的稳定 ID。" },
+        "claim_text": { "type": "string", "description": "被支撑的那句话（原句引用）。" },
+        "location": {
+          "type": "object",
+          "required": ["section"],
+          "properties": {
+            "section": { "type": "string" },
+            "paragraph_id": { "type": ["string", "null"] },
+            "sentence_index": { "type": ["integer", "null"] },
+            "char_offset": { "type": ["integer", "null"], "description": "该句在稿件文本中的字符起点。" }
+          }
+        },
+        "citation_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "支撑该论断的文献 key；多引/一引多句都要逐句记录。"
+        },
+        "citation_form": {
+          "type": "string",
+          "enum": ["numeric", "author_year", "footnote", "none"],
+          "description": "该处采用的引用形式。"
+        },
+        "relation": {
+          "type": "string",
+          "enum": ["supports", "method_basis", "comparison", "definition", "contradicts", "data_source", "reports"],
+          "description": "论断与被引文献的关系：支持/方法依据/对比/定义/矛盾/数据来源/转述。"
+        },
+        "evidence_quote": {
+          "type": ["string", "null"],
+          "description": "被引文献中支撑该论断的原文片段；查不到原文则为 null 并置 claim_match=unknown。"
+        },
+        "evidence_location": {
+          "type": ["string", "null"],
+          "description": "证据在被引文献中的位置：页码/章节/DOI/URL。"
+        },
+        "claim_match": {
+          "type": "string",
+          "enum": ["matches", "partial", "mismatch", "unknown"],
+          "description": "正文论断与被引文献主题/结论的匹配判定：matches=一致；partial=部分一致；mismatch=错配需换引或改写；unknown=证据不足。"
+        },
+        "unsupported": {
+          "type": "boolean",
+          "description": "该句需要来源但没有任何可用文献支撑时为 true。"
+        },
+        "needs_human": { "type": "boolean" },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "DedupDecision": {
+      "type": "object",
+      "description": "单条去重决策，含解释与置信度；合并与禁止合并都要记录。",
+      "required": ["verdict", "confidence", "reason"],
+      "properties": {
+        "verdict": { "type": "string", "enum": ["same_work", "candidate_merge", "ambiguous", "different_work"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "reason": { "type": "string", "description": "命中哪些字段：DOI / 题名+第一作者+年份 / 作者+年份+出处 / 禁并依据。" },
+        "a_key": { "type": ["string", "null"] },
+        "b_key": { "type": ["string", "null"] },
+        "title_similarity": { "type": ["number", "null"] }
+      }
+    },
+    "CitationIssueReport": {
+      "type": "object",
+      "description": "校验发现的问题，供人工接管。",
+      "required": ["severity", "kind", "message"],
+      "properties": {
+        "severity": { "type": "string", "enum": ["error", "warning", "info"] },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "in_text_missing_in_list",
+            "list_entry_uncited",
+            "number_out_of_range",
+            "numbering_gap",
+            "duplicate_entry_not_merged",
+            "false_merge_risk",
+            "fabricated_reference",
+            "metadata_mismatch",
+            "claim_mismatch",
+            "unsupported_claim",
+            "doi_resolution_failed",
+            "missing_field"
+          ]
+        },
+        "location": { "type": ["string", "null"] },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

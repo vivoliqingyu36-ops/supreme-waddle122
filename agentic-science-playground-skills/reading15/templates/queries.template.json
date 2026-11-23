@@ -1,0 +1,40 @@
+{
+  "queries": [
+    {
+      "id": "Q1",
+      "question": "某方法（node id 在此）使用了哪些材料/指标？",
+      "type": "neighborhood",
+      "params": {"node": "primary.method.001", "max_depth": 1}
+    },
+    {
+      "id": "Q2",
+      "question": "追溯某节点/某条边的原文证据",
+      "type": "trace",
+      "params": {"element": "E001"}
+    },
+    {
+      "id": "Q3",
+      "question": "两节点之间是否存在（含跨篇）路径？",
+      "type": "path",
+      "params": {"from": "primary.method.001", "to": "secondary.metric.002", "max_hops": 3}
+    },
+    {
+      "id": "Q4",
+      "question": "按名称/别名查找实体",
+      "type": "node_by_name",
+      "params": {"text": "AuNP", "limit": 10}
+    },
+    {
+      "id": "Q5",
+      "question": "列出某类实体",
+      "type": "node_by_type",
+      "params": {"entity_type": "conclusion"}
+    },
+    {
+      "id": "Q6",
+      "question": "列出某类关系（含跨篇对齐/不合并记录）",
+      "type": "edges_by_type",
+      "params": {"relation": "DISTINCT_FROM"}
+    }
+  ]
+}

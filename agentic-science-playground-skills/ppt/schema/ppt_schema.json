@@ -1,0 +1,255 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.invalid/skills/paper-to-academic-ppt/schema/ppt_schema.json",
+  "title": "paper-to-academic-ppt schema bundle",
+  "description": "Structure contract for the three artifacts of the paper→academic-PPT skill: (1) paper_skeleton (extraction input), (2) slide_outline (page-level outline + per-page evidence map), (3) result.json (runtime deliverable). All locator fields point back to the source paper page/section/bbox; all verbatim fields must equal the source text. The python validator src/ppt_outline.py implements the same field names; this file is the human/tool-readable contract and is validated with any JSON-Schema tool when available.",
+  "type": "object",
+  "definitions": {
+    "Locator": {
+      "type": "object",
+      "description": "Where a claim, figure, table, formula or datum comes from in the source paper. At least one field must be non-null.",
+      "properties": {
+        "file": {"type": ["string", "null"], "description": "Source file path or name."},
+        "page": {"type": ["integer", "null"], "minimum": 1, "description": "1-based physical page number."},
+        "section": {"type": ["string", "null"], "description": "Section heading or number, verbatim."},
+        "where": {"type": ["string", "null"], "description": "Human-readable anchor inside the page/section, e.g. 'Results, paragraph 2'."},
+        "bbox": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 4, "maxItems": 4, "description": "Optional [x0,y0,x1,y1] in source PDF points, origin top-left."}
+      },
+      "additionalProperties": false
+    },
+    "DataPoint": {
+      "type": "object",
+      "description": "One number/unit kept VERBATIM from the paper, plus the condition under which it holds.",
+      "required": ["value"],
+      "properties": {
+        "ref": {"type": "string", "description": "Evidence id this datum was copied from, e.g. fig:2 / tab:1."},
+        "value": {"type": "string", "description": "Exact value string as printed (must contain at least one digit)."},
+        "unit": {"type": ["string", "null"], "description": "Exact unit as printed; null only when the paper prints no unit and unit_absent is true."},
+        "unit_absent": {"type": "boolean", "description": "True when the source genuinely prints no unit."},
+        "condition": {"type": ["string", "null"], "description": "Necessary condition (n, p, temperature, method variant) verbatim or paraphrased-with-locator."},
+        "locator": {"$ref": "#/definitions/Locator"}
+      },
+      "additionalProperties": false
+    },
+    "EvidenceItem": {
+      "type": "object",
+      "description": "One citable figure/table/formula/data source in the paper.",
+      "required": ["id", "kind", "owner", "label", "locator"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_\\-]*(:[A-Za-z0-9_\\-]+)?$", "description": "Stable id, e.g. fig:2, tab:1, formula:3, data:s1."},
+        "kind": {"enum": ["figure", "table", "formula", "data"], "description": "What the item is."},
+        "role": {"enum": ["data", "schematic", "illustration", "formula", "derivation"], "description": "For figures: data=screenshot of measured results, schematic/illustration=diagram explaining setup, NOT measured data. For tables always data. For formula: formula or derivation."},
+        "owner": {"enum": ["paper", "cited", "other"], "description": "paper=this paper's own result; cited/other=previously reported or third-party, must never be claimed as this paper's result."},
+        "label": {"type": "string", "description": "Exact printed label, e.g. 'Figure 2', 'Table 1', '(3)'."},
+        "caption": {"type": ["string", "null"], "description": "Caption as printed (may be truncated, mark with ellipsis)."},
+        "locator": {"$ref": "#/definitions/Locator"},
+        "data_points": {"type": "array", "items": {"$ref": "#/definitions/DataPoint"}, "description": "Verbatim numbers/units extracted from this item, for figure/table/data items."}
+      },
+      "additionalProperties": false
+    },
+    "EvidenceBinding": {
+      "type": "object",
+      "description": "Binding of one slide to one evidence item. The locator/label are copied from EvidenceItem so the slide is self-contained.",
+      "required": ["ref", "use"],
+      "properties": {
+        "ref": {"type": "string"},
+        "use": {"enum": ["data", "context", "reference"], "description": "data=this item is the page's key evidence; context=defines setup/method; reference=prior/other work, requires attribution in notes."},
+        "label": {"type": ["string", "null"]},
+        "caption_note": {"type": ["string", "null"]},
+        "locator": {"$ref": "#/definitions/Locator"}
+      },
+      "additionalProperties": false
+    },
+    "Slide": {
+      "type": "object",
+      "description": "One page. Exactly one claim; bullets are sub-points of that claim, not additional claims.",
+      "required": ["index", "role", "claim", "bullets", "evidence", "data_verbatim", "notes", "layout"],
+      "properties": {
+        "index": {"type": "integer", "minimum": 1},
+        "role": {"enum": ["title", "problem", "gap", "method", "evidence", "conclusion", "limitations", "backup", "thanks"]},
+        "claim": {"type": "string", "minLength": 1, "maxLength": 160, "description": "The single page-level claim; one sentence preferred."},
+        "bullets": {"type": "array", "maxItems": 6, "items": {"type": "string", "maxLength": 120}, "description": "Speakable phrases supporting the claim; not paragraphs cut into lines."},
+        "evidence": {"type": "array", "items": {"$ref": "#/definitions/EvidenceBinding"}},
+        "data_verbatim": {"type": "array", "items": {"$ref": "#/definitions/DataPoint"}},
+        "notes": {"type": "string", "description": "Speaker notes: transition/emphasis/backup evidence; must NOT repeat claim or bullet text verbatim."},
+        "layout": {"$ref": "#/definitions/LayoutRef"},
+        "claim_locator": {"$ref": "#/definitions/Locator", "description": "Where this page's claim itself comes from (section/paragraph), so even text-only pages are traceable."},
+        "uncertainty": {"type": "array", "items": {"$ref": "#/definitions/Uncertainty"}}
+      },
+      "additionalProperties": false
+    },
+    "LayoutRef": {
+      "type": "object",
+      "description": "Which template layout this page uses and how content maps to placeholders.",
+      "required": ["layout_name"],
+      "properties": {
+        "layout_name": {"type": "string"},
+        "title": {"type": ["string", "null"], "description": "Effective title text placed into the title placeholder."},
+        "placeholder_map": {"type": "object", "description": "role -> placeholder name, e.g. {\"title\":\"title\",\"body\":\"content\",\"figure\":\"picture\"}."},
+        "overflow_plan": {"type": ["string", "null"], "description": "How long titles / multi-figure / large tables were adapted without overflow."}
+      },
+      "additionalProperties": false
+    },
+    "Uncertainty": {
+      "type": "object",
+      "description": "One honest uncertainty/limit marker.",
+      "required": ["kind", "detail"],
+      "properties": {
+        "kind": {"enum": ["unreadable", "not_reported", "conflict", "ambiguous", "heuristic_guess", "missing_data", "other"]},
+        "detail": {"type": "string"},
+        "locator": {"$ref": "#/definitions/Locator"}
+      },
+      "additionalProperties": false
+    },
+    "EvidenceMapEntry": {
+      "type": "object",
+      "description": "Per-page evidence traceability record for one evidence item.",
+      "required": ["ref", "slides", "status", "owner", "kind", "label", "locator"],
+      "properties": {
+        "ref": {"type": "string"},
+        "slides": {"type": "array", "items": {"type": "integer"}, "description": "Slide indexes that cite this item."},
+        "status": {"enum": ["used", "unused"], "description": "used=appears on >=1 page; unused=extracted but deliberately not shown, reason required in note."},
+        "unused_reason": {"type": ["string", "null"]},
+        "owner": {"enum": ["paper", "cited", "other"]},
+        "kind": {"enum": ["figure", "table", "formula", "data"]},
+        "role": {"enum": ["data", "schematic", "illustration", "formula", "derivation", null]},
+        "label": {"type": "string"},
+        "locator": {"$ref": "#/definitions/Locator"}
+      },
+      "additionalProperties": false
+    },
+    "PaperSkeleton": {
+      "type": "object",
+      "description": "Input to src/ppt_outline.py build. Produced by the runtime agent after reading the paper.",
+      "required": ["paper_id", "meta", "mainline", "evidence_index"],
+      "properties": {
+        "paper_id": {"type": "string"},
+        "meta": {
+          "type": "object",
+          "required": ["title", "source_file"],
+          "properties": {
+            "title": {"type": "string"},
+            "authors": {"type": "array", "items": {"type": "string"}},
+            "venue": {"type": ["string", "null"]},
+            "doi": {"type": ["string", "null"]},
+            "source_file": {"type": "string"},
+            "page_count": {"type": ["integer", "null"]}
+          },
+          "additionalProperties": true
+        },
+        "mainline": {
+          "type": "object",
+          "required": ["problem", "method", "key_evidence", "conclusion"],
+          "properties": {
+            "problem": {"$ref": "#/definitions/ClaimLoc"},
+            "gap": {"$ref": "#/definitions/ClaimLoc"},
+            "method": {"$ref": "#/definitions/ClaimLoc"},
+            "key_evidence": {"type": "array", "items": {"$ref": "#/definitions/KeyEvidence"}},
+            "conclusion": {"$ref": "#/definitions/ClaimLoc"},
+            "limitations": {"type": "array", "items": {"$ref": "#/definitions/ClaimLoc"}}
+          },
+          "additionalProperties": false
+        },
+        "evidence_index": {"type": "array", "items": {"$ref": "#/definitions/EvidenceItem"}}
+      },
+      "additionalProperties": false
+    },
+    "ClaimLoc": {
+      "type": "object",
+      "description": "A claim plus where it comes from.",
+      "required": ["claim", "locator"],
+      "properties": {
+        "claim": {"type": "string", "minLength": 1},
+        "locator": {"$ref": "#/definitions/Locator"}
+      },
+      "additionalProperties": false
+    },
+    "KeyEvidence": {
+      "type": "object",
+      "description": "One key result that supports the conclusion, with its evidence refs.",
+      "required": ["id", "claim", "refs", "locator"],
+      "properties": {
+        "id": {"type": "string"},
+        "claim": {"type": "string"},
+        "refs": {"type": "array", "items": {"type": "string"}},
+        "locator": {"$ref": "#/definitions/Locator"}
+      },
+      "additionalProperties": false
+    },
+    "SlideOutline": {
+      "type": "object",
+      "description": "Output of src/ppt_outline.py build: page-level outline + evidence map + contract report.",
+      "required": ["paper_id", "schema_version", "meta", "narrative_arc", "slides", "evidence_index", "evidence_map", "contract"],
+      "properties": {
+        "paper_id": {"type": "string"},
+        "schema_version": {"type": "string"},
+        "meta": {"type": "object"},
+        "narrative_arc": {"type": "array", "items": {"type": "string"}, "description": "Canonical page order: problem → gap → method → evidence:… → conclusion → limitations."},
+        "slides": {"type": "array", "items": {"$ref": "#/definitions/Slide"}},
+        "evidence_index": {"type": "array", "items": {"$ref": "#/definitions/EvidenceItem"}},
+        "evidence_map": {"type": "array", "items": {"$ref": "#/definitions/EvidenceMapEntry"}},
+        "contract": {"$ref": "#/definitions/ContractReport"}
+      },
+      "additionalProperties": false
+    },
+    "ContractReport": {
+      "type": "object",
+      "description": "Deck-contract validation report produced by ppt_outline.py.",
+      "required": ["slide_limit", "slide_count", "checks", "errors", "warnings"],
+      "properties": {
+        "slide_limit": {"type": "integer"},
+        "slide_count": {"type": "integer"},
+        "checks": {"type": "object", "description": "check name -> boolean."},
+        "errors": {"type": "array", "items": {"type": "string"}},
+        "warnings": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "ResultJson": {
+      "type": "object",
+      "description": "Runtime deliverable /app/output/result.json. Includes case_id plus every output_contract field.",
+      "required": ["case_id", "status", "meta", "mainline", "slides", "evidence_map", "artifacts", "versions", "uncertainty", "change_log"],
+      "properties": {
+        "case_id": {"type": "string"},
+        "status": {"enum": ["success", "partial", "failed"]},
+        "meta": {"type": "object"},
+        "mainline": {"type": "object", "description": "Narrative arc: problem→method→key evidence→conclusion→limitations."},
+        "slides": {"type": "array", "items": {"$ref": "#/definitions/Slide"}},
+        "evidence_map": {"type": "array", "items": {"$ref": "#/definitions/EvidenceMapEntry"}},
+        "artifacts": {
+          "type": "object",
+          "description": "Editable source and rendered preview paths under /app/output.",
+          "properties": {
+            "outline_json": {"type": "string"},
+            "pptx": {"type": "string"},
+            "pdf": {"type": ["string", "null"]},
+            "png_previews": {"type": "array", "items": {"type": "string"}},
+            "notes_md": {"type": ["string", "null"]}
+          },
+          "additionalProperties": true
+        },
+        "versions": {
+          "type": "object",
+          "description": "Reproducibility record: template, fonts, software.",
+          "properties": {
+            "skill_version": {"type": "string"},
+            "template_file": {"type": "string"},
+            "template_sha256": {"type": ["string", "null"]},
+            "fonts": {"type": "array", "items": {"type": "string"}},
+            "software": {"type": "array", "items": {"type": "string"}},
+            "font_discovery": {"type": ["string", "null"]}
+          },
+          "additionalProperties": true
+        },
+        "uncertainty": {"type": "array", "items": {"$ref": "#/definitions/Uncertainty"}},
+        "change_log": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    }
+  },
+  "properties": {
+    "paper_skeleton": {"$ref": "#/definitions/PaperSkeleton"},
+    "slide_outline": {"$ref": "#/definitions/SlideOutline"},
+    "result": {"$ref": "#/definitions/ResultJson"}
+  }
+}

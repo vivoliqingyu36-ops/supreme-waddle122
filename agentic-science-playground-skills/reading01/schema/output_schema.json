@@ -1,0 +1,357 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/schemas/academic-pdf-parser/result.schema.json",
+  "title": "academic-pdf-parser result.json",
+  "description": "文献 PDF 解析的结构化结果契约。每个文本块/表格/公式/图表都带 page + block 证据与诚实的 uncertainty 字段；读不出的部分必须标注，不得猜补。字段含义见 README.md 与 SKILL.md。",
+  "type": "object",
+  "required": ["case_id", "document", "status", "body", "tables", "formulas", "figures", "references", "evidence", "uncertainty"],
+  "additionalProperties": true,
+  "properties": {
+    "case_id": { "type": "string", "description": "来自 /input/case.json 的 case_id，原样回填" },
+    "document": {
+      "type": "object",
+      "required": ["file", "page_count", "has_text_layer", "is_scanned", "tool_path"],
+      "properties": {
+        "file": { "type": "string" },
+        "page_count": { "type": "integer", "minimum": 0 },
+        "has_text_layer": { "type": "boolean" },
+        "is_scanned": { "type": "boolean" },
+        "is_encrypted": { "type": "boolean" },
+        "tool_path": { "type": "string", "enum": ["pdf-text-tool", "pdf-render-tool+ocr-tool", "mixed", "external"] },
+        "producer": { "type": "string" },
+        "page_rotation": { "type": "array", "items": { "type": "integer" } }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "标题/作者/摘要等，仅当能从原文逐字引用时填写；不确定的字段置 null 并在 uncertainty 注明。",
+      "properties": {
+        "title": { "type": ["string", "null"] },
+        "authors": { "type": ["array", "null"], "items": { "type": "string" } },
+        "affiliations": { "type": ["array", "null"], "items": { "type": "string" } },
+        "abstract": { "type": ["string", "null"] },
+        "keywords": { "type": ["array", "null"], "items": { "type": "string" } },
+        "doi": { "type": ["string", "null"] },
+        "journal": { "type": ["string", "null"] },
+        "year": { "type": ["integer", "null"] },
+        "volume": { "type": ["string", "null"] },
+        "issue": { "type": ["string", "null"] },
+        "pages": { "type": ["string", "null"] }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "description": "章节层级（编号、层级、起止页与标题块）。",
+      "items": { "$ref": "#/definitions/section" }
+    },
+    "body": {
+      "type": "array",
+      "description": "正文文本块，按阅读顺序排列。逐行原文保留，禁止把相邻段落硬拼成一句。",
+      "items": { "$ref": "#/definitions/textBlock" }
+    },
+    "tables": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/table" }
+    },
+    "formulas": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/formula" }
+    },
+    "figures": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/figure" }
+    },
+    "references": {
+      "type": "array",
+      "description": "参考文献条目，逐字原文 + 可选解析字段。",
+      "items": { "$ref": "#/definitions/reference" }
+    },
+    "footnotes": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/footnote" }
+    },
+    "headers_footers": {
+      "type": "array",
+      "description": "被剔除出正文的页眉页脚/页码，保留证据以备复核。",
+      "items": { "$ref": "#/definitions/headerFooter" }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "partial", "failed", "cannot_judge"],
+      "description": "运行状态：成功/部分完成/失败/无法判断。部分完成必须列 limits。"
+    },
+    "evidence": { "$ref": "#/definitions/evidenceSummary" },
+    "uncertainty": {
+      "type": "array",
+      "description": "全文级不确定项：未报告、无法判断、材料冲突、读不出的区域。",
+      "items": { "$ref": "#/definitions/uncertainty" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "limits": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "部分完成时的边界说明。"
+    },
+    "change_log": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "幂等重跑时的变更记录。"
+    }
+  },
+  "definitions": {
+    "bbox": {
+      "type": "object",
+      "required": ["page", "x0", "y0", "x1", "y1"],
+      "properties": {
+        "page": { "type": "integer" },
+        "x0": { "type": "number" }, "y0": { "type": "number" },
+        "x1": { "type": "number" }, "y1": { "type": "number" },
+        "unit": { "type": "string", "default": "pt" },
+        "origin": { "type": "string", "default": "top-left" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "description": "每条结论的证据定位。",
+      "required": ["page", "block_ids"],
+      "properties": {
+        "page": { "type": "integer" },
+        "block_ids": { "type": "array", "items": { "type": "string" } },
+        "span_ids": { "type": "array", "items": { "type": "string" } },
+        "bbox": { "$ref": "#/definitions/bbox" },
+        "kind": { "type": "string", "description": "text_layer / ocr / render_crop / manual" },
+        "method": { "type": "string", "description": "抽取方法或规则名" },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low", "unknown"] }
+      }
+    },
+    "evidenceSummary": {
+      "type": "object",
+      "required": ["coverage", "unreadable"],
+      "properties": {
+        "coverage": {
+          "type": "object",
+          "properties": {
+            "pages_parsed": { "type": "integer" },
+            "total_pages": { "type": "integer" },
+            "blocks_with_evidence": { "type": "integer" },
+            "total_blocks": { "type": "integer" },
+            "tables_with_evidence": { "type": "integer" },
+            "total_tables": { "type": "integer" }
+          }
+        },
+        "unreadable": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/uncertainty" }
+        }
+      }
+    },
+    "textBlock": {
+      "type": "object",
+      "required": ["block_id", "page", "role", "text", "bbox", "source", "uncertainty"],
+      "properties": {
+        "block_id": { "type": "string", "pattern": "^p[0-9]+-b[0-9]+$" },
+        "page": { "type": "integer" },
+        "order": { "type": "integer" },
+        "section_id": { "type": ["string", "null"] },
+        "role": { "type": "string", "enum": ["title", "authors", "abstract", "heading", "body", "caption", "footnote", "reference", "header", "footer", "table", "formula", "equation", "acknowledgement", "other"] },
+        "text": { "type": "string", "description": "逐行原文，行内空格与换行保留；禁止合并段落。" },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["text", "x0", "y0", "x1", "y1"],
+            "properties": {
+              "text": { "type": "string" },
+              "x0": { "type": "number" }, "y0": { "type": "number" },
+              "x1": { "type": "number" }, "y1": { "type": "number" },
+              "para_break": { "type": "boolean" },
+              "span_ids": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "bbox": { "$ref": "#/definitions/bbox" },
+        "source": { "type": "string", "enum": ["text_layer", "ocr", "mixed", "manual"] },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low", "unknown"] },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } },
+        "span_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": ["section_id", "title", "level", "heading_block_ids"],
+      "properties": {
+        "section_id": { "type": "string" },
+        "number": { "type": ["string", "null"] },
+        "title": { "type": "string" },
+        "level": { "type": "integer", "minimum": 1 },
+        "parent_section_id": { "type": ["string", "null"] },
+        "heading_block_ids": { "type": "array", "items": { "type": "string" } },
+        "start_page": { "type": "integer" },
+        "end_page": { "type": "integer" },
+        "order": { "type": "integer" },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "table": {
+      "type": "object",
+      "required": ["table_id", "page", "bbox", "n_rows", "n_cols", "rows", "source", "uncertainty"],
+      "properties": {
+        "table_id": { "type": "string", "pattern": "^p[0-9]+-t[0-9]+$" },
+        "page": { "type": "integer" },
+        "bbox": { "$ref": "#/definitions/bbox" },
+        "caption": { "type": ["string", "null"] },
+        "caption_block_id": { "type": ["string", "null"] },
+        "n_rows": { "type": "integer" },
+        "n_cols": { "type": "integer" },
+        "header_rows": { "type": "integer", "default": 0 },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/cell" }
+          }
+        },
+        "merged_cells": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "owner_cell_id": { "type": "string" },
+              "rowspan": { "type": "integer" },
+              "colspan": { "type": "integer" }
+            }
+          }
+        },
+        "markdown": { "type": "string", "description": "无 rowspan/colspan 的简化 Markdown；合并信息在 merged_cells。" },
+        "continued_on": { "type": ["string", "null"], "description": "跨页续表指向的 table_id" },
+        "source": { "type": "string", "enum": ["text_layer", "ocr", "mixed", "manual"] },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low", "unknown"] },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } },
+        "evidence": { "$ref": "#/definitions/evidence" }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "required": ["cell_id", "row", "col", "text", "rowspan", "colspan", "uncertainty"],
+      "properties": {
+        "cell_id": { "type": "string" },
+        "row": { "type": "integer" },
+        "col": { "type": "integer" },
+        "text": { "type": "string" },
+        "rowspan": { "type": "integer", "minimum": 1 },
+        "colspan": { "type": "integer", "minimum": 1 },
+        "merged_into": { "type": ["string", "null"] },
+        "span_ids": { "type": "array", "items": { "type": "string" } },
+        "bbox": { "$ref": "#/definitions/bbox" },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "formula": {
+      "type": "object",
+      "required": ["formula_id", "page", "text", "source", "uncertainty"],
+      "properties": {
+        "formula_id": { "type": "string" },
+        "page": { "type": "integer" },
+        "bbox": { "$ref": "#/definitions/bbox" },
+        "text": { "type": "string", "description": "从文本层/OCR 拿到的原文字符" },
+        "latex": { "type": ["string", "null"], "description": "人工确认后的 LaTeX；不确定则 null" },
+        "latex_hint": { "type": ["string", "null"] },
+        "equation_number": { "type": ["string", "null"] },
+        "special_chars": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "char": { "type": "string" },
+              "latex": { "type": "string" },
+              "position": { "type": "integer" }
+            }
+          }
+        },
+        "superscript_note": { "type": "string", "description": "上下标识别说明或不确定项" },
+        "block_id": { "type": ["string", "null"] },
+        "source": { "type": "string", "enum": ["text_layer", "ocr", "render_crop", "manual"] },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low", "unknown"] },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "figure": {
+      "type": "object",
+      "required": ["figure_id", "page", "bbox", "source", "uncertainty"],
+      "properties": {
+        "figure_id": { "type": "string" },
+        "page": { "type": "integer" },
+        "bbox": { "$ref": "#/definitions/bbox" },
+        "caption": { "type": ["string", "null"] },
+        "caption_block_id": { "type": ["string", "null"] },
+        "kind": { "type": "string", "enum": ["raster", "vector", "chart", "photo", "diagram", "unknown"] },
+        "image_ref": { "type": ["string", "null"], "description": "渲染裁剪图相对路径，便于人工复核" },
+        "source": { "type": "string", "enum": ["render_crop", "embedded_image", "unknown"] },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "reference": {
+      "type": "object",
+      "required": ["ref_id", "raw_text", "page", "block_id", "uncertainty"],
+      "properties": {
+        "ref_id": { "type": "string" },
+        "raw_text": { "type": "string", "description": "参考文献逐字原文" },
+        "order": { "type": "integer" },
+        "page": { "type": "integer" },
+        "block_id": { "type": "string" },
+        "parsed": {
+          "type": "object",
+          "properties": {
+            "authors": { "type": ["array", "null"], "items": { "type": "string" } },
+            "year": { "type": ["integer", "null"] },
+            "title": { "type": ["string", "null"] },
+            "journal": { "type": ["string", "null"] },
+            "volume": { "type": ["string", "null"] },
+            "pages": { "type": ["string", "null"] },
+            "doi": { "type": ["string", "null"] }
+          }
+        },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "footnote": {
+      "type": "object",
+      "required": ["footnote_id", "page", "marker", "text", "block_id", "uncertainty"],
+      "properties": {
+        "footnote_id": { "type": "string" },
+        "page": { "type": "integer" },
+        "bbox": { "$ref": "#/definitions/bbox" },
+        "marker": { "type": "string", "description": "正文中的脚注标记，如 1、*、†" },
+        "text": { "type": "string" },
+        "block_id": { "type": "string" },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/definitions/uncertainty" } }
+      }
+    },
+    "headerFooter": {
+      "type": "object",
+      "required": ["block_id", "page", "kind", "text", "bbox"],
+      "properties": {
+        "block_id": { "type": "string" },
+        "page": { "type": "integer" },
+        "kind": { "type": "string", "enum": ["header", "footer", "page_number", "running_title", "marginalia"] },
+        "text": { "type": "string" },
+        "bbox": { "$ref": "#/definitions/bbox" },
+        "repeated_across_pages": { "type": "boolean" }
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "required": ["kind", "detail"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["unreadable", "not_reported", "conflict", "ambiguous", "heuristic_guess", "missing_data", "other"] },
+        "detail": { "type": "string" },
+        "page": { "type": ["integer", "null"] },
+        "block_id": { "type": ["string", "null"] },
+        "evidence": { "$ref": "#/definitions/evidence" }
+      }
+    }
+  }
+}

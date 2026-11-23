@@ -1,0 +1,223 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.org/schemas/intro-related-work-writer/v1",
+  "title": "intro-related-work-writer 结构化写作产物",
+  "description": "引言与相关工作写作的 claim→来源映射、贡献→证据映射、gap 推导链、比较矩阵与 result.json 的 JSON Schema。所有字符串为 UTF-8；缺失字段一律显式写 null 或省略，不编造。",
+  "definitions": {
+    "reference": {
+      "type": "object",
+      "title": "Reference（参考文献条目）",
+      "required": ["key"],
+      "properties": {
+        "key": { "type": "string", "description": "引用键，与 claim.source.citation_key、gap.basis_works 一致，如 w1、smith2023" },
+        "authors": { "type": "string", "description": "作者，照抄来源；来源没有写 null" },
+        "year": { "type": ["string", "integer", "null"] },
+        "title": { "type": "string" },
+        "venue": { "type": "string", "description": "期刊/会议/预印本服务器" },
+        "doi": { "type": ["string", "null"], "description": "来源照抄；没有写 null，禁止编造" },
+        "url": { "type": ["string", "null"] },
+        "raw": { "type": "string", "description": "原始 bibtex/条目文本，便于回溯" },
+        "metadata_verified": { "type": "boolean", "description": "元数据是否与来源一致/DOI 是否解析成功" }
+      },
+      "additionalProperties": true
+    },
+    "claimSource": {
+      "title": "claim 的来源，三选一、互斥",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["citation_key"],
+          "properties": { "citation_key": { "type": "string", "description": "指向 references 中的 key" } }
+        },
+        {
+          "type": "object",
+          "required": ["evidence_loc"],
+          "properties": { "evidence_loc": { "type": "string", "description": "本文事实/文件定位，如 paper_facts.md#L42" } }
+        },
+        {
+          "type": "object",
+          "required": ["author_judgment", "reason"],
+          "properties": {
+            "author_judgment": { "const": true },
+            "reason": { "type": "string", "description": "为什么这是作者判断/本技能推断，必须写理由" }
+          }
+        }
+      ]
+    },
+    "claimRecord": {
+      "type": "object",
+      "title": "ClaimRecord（claim→来源映射）",
+      "required": ["claim_id", "claim_text", "claim_type", "source", "status"],
+      "properties": {
+        "claim_id": { "type": "string", "pattern": "^c[0-9]+$", "description": "形如 c01，与草稿中的 [claim: cNN] 一致" },
+        "claim_text": { "type": "string", "description": "草稿中的断言原文" },
+        "claim_type": {
+          "type": "string",
+          "enum": [
+            "background_lineage",
+            "background_problem",
+            "prior_work_claim",
+            "gap_premise",
+            "gap_statement",
+            "contribution",
+            "fill_relation",
+            "fact"
+          ]
+        },
+        "source": { "$ref": "#/definitions/claimSource" },
+        "status": {
+          "type": "string",
+          "enum": ["cited", "unverified", "author_judgment", "conflict"],
+          "description": "cited=有引用且已核对；unverified=有引用未核对原文；author_judgment=作者判断；conflict=来源冲突"
+        },
+        "quote_or_paraphrase": { "type": "string", "description": "支撑该 claim 的原文摘句或紧贴转述；author_judgment 可省略" },
+        "needs_human": { "type": "boolean", "description": "转述超出原文/DOI 查不到/来源冲突时为 true" }
+      },
+      "additionalProperties": false
+    },
+    "contributionRecord": {
+      "type": "object",
+      "title": "ContributionRecord（贡献→证据映射）",
+      "required": ["contribution_id", "contribution_text", "evidence", "evidence_status"],
+      "properties": {
+        "contribution_id": { "type": "string", "pattern": "^g[0-9]+$", "description": "形如 g1" },
+        "contribution_text": { "type": "string", "description": "贡献条目原文" },
+        "evidence": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 0,
+          "description": "本文证据定位：方法小节号/图号/表号/实验编号/公式号"
+        },
+        "evidence_status": {
+          "type": "string",
+          "enum": ["verified", "missing"],
+          "description": "verified=正文确有此证据；missing=找不到对应证据，须降级为计划/假设或删除"
+        },
+        "overclaim_risk": { "type": "string", "enum": ["none", "soften", "drop"] }
+      },
+      "additionalProperties": false
+    },
+    "gapRecord": {
+      "type": "object",
+      "title": "GapRecord（空白推导链）",
+      "required": ["gap_id", "gap_type", "this_paper_fill"],
+      "properties": {
+        "gap_id": { "type": "string", "pattern": "^g[0-9]+$" },
+        "gap_type": {
+          "type": "string",
+          "enum": ["shared_limitation", "uncovered_scenario", "conflicting_conclusion", "no_basis"],
+          "description": "shared_limitation=≥2 篇共同限制；uncovered_scenario=具体场景未被覆盖；conflicting_conclusion=≥2 篇冲突；no_basis=无依据，须标作者判断"
+        },
+        "basis_works": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "依据文献的 citation_key；shared_limitation 与 conflicting_conclusion 至少 2 个"
+        },
+        "basis_loc": { "type": "string", "description": "依据的原文定位，如 refs.json#w1.limitation" },
+        "this_paper_fill": { "type": "string", "description": "本文如何填补，必须来自本文事实（方法/实验/图/表）" }
+      },
+      "additionalProperties": false
+    },
+    "relatedWorkRow": {
+      "type": "object",
+      "title": "RelatedWorkRow（比较矩阵的一行）",
+      "required": ["work_key", "problem_setting", "method_route", "data_eval"],
+      "properties": {
+        "work_key": { "type": "string" },
+        "authors": { "type": "string" },
+        "year": { "type": ["string", "integer", "null"] },
+        "venue": { "type": "string" },
+        "doi": { "type": ["string", "null"] },
+        "problem_setting": { "type": "string" },
+        "method_route": { "type": "string" },
+        "data_eval": { "type": "string" },
+        "stated_conclusion": { "type": "string", "description": "作者自己宣称的结论" },
+        "applicability": { "type": "string" },
+        "limitation": { "type": "string", "description": "来源没写就写「未报告」，不代写" },
+        "evidence_loc": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "sourceMap": {
+      "type": "object",
+      "title": "SourceMap（source_map.json 顶层）",
+      "required": ["case_id", "references", "claims", "contributions", "gaps", "related_work"],
+      "properties": {
+        "case_id": { "type": "string" },
+        "references": { "type": "array", "items": { "$ref": "#/definitions/reference" } },
+        "claims": { "type": "array", "items": { "$ref": "#/definitions/claimRecord" } },
+        "contributions": { "type": "array", "items": { "$ref": "#/definitions/contributionRecord" } },
+        "gaps": { "type": "array", "items": { "$ref": "#/definitions/gapRecord" } },
+        "related_work": { "type": "array", "items": { "$ref": "#/definitions/relatedWorkRow" } }
+      },
+      "additionalProperties": false
+    },
+    "writingResult": {
+      "type": "object",
+      "title": "WritingResult（/app/output/result.json 顶层）",
+      "required": ["case_id", "status", "output_contract"],
+      "properties": {
+        "case_id": { "type": "string" },
+        "status": { "type": "string", "enum": ["success", "partial", "failed"] },
+        "output_contract": { "type": "object", "description": "题面要求的每个字段逐字保留" },
+        "assumptions": { "type": "array", "items": { "type": "string" } },
+        "artifacts": {
+          "type": "object",
+          "properties": {
+            "draft": { "type": "string" },
+            "source_map_md": { "type": "string" },
+            "comparison_matrix": { "type": "string" },
+            "source_map_json": { "type": "string" }
+          }
+        },
+        "claims": { "type": "array", "items": { "$ref": "#/definitions/claimRecord" } },
+        "contributions": { "type": "array", "items": { "$ref": "#/definitions/contributionRecord" } },
+        "gaps": { "type": "array", "items": { "$ref": "#/definitions/gapRecord" } },
+        "citation_coverage": {
+          "type": "object",
+          "properties": {
+            "key_works": { "type": "array", "items": { "type": "string" } },
+            "representative_works": { "type": "array", "items": { "type": "string" } },
+            "recent_works": { "type": "array", "items": { "type": "string" } },
+            "uncited_in_library": { "type": "array", "items": { "type": "string" } },
+            "missing_from_library": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "verification": {
+          "type": "object",
+          "properties": {
+            "four_questions": {
+              "type": "object",
+              "properties": {
+                "stand_firm": { "type": "string", "enum": ["pass", "fail", "na"] },
+                "group_clearly": { "type": "string", "enum": ["pass", "fail", "na"] },
+                "gap_grounded": { "type": "string", "enum": ["pass", "fail", "na"] },
+                "aligned": { "type": "string", "enum": ["pass", "fail", "na"] }
+              }
+            },
+            "checklist_path": { "type": "string" },
+            "script_exit_code": { "type": "integer", "enum": [0, 1, 2] }
+          }
+        },
+        "change_record": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "what", "why"],
+            "properties": {
+              "file": { "type": "string" },
+              "what": { "type": "string" },
+              "why": { "type": "string" },
+              "claim_ids": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "needs_human": { "type": "array", "items": { "type": "string" } },
+        "uncertainty": { "type": "array", "items": { "type": "string" } },
+        "material_gaps": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$ref": "#/definitions/writingResult"
+}

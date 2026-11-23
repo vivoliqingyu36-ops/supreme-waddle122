@@ -1,0 +1,268 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.org/schemas/latex-build-record.schema.json",
+  "title": "LaTeXBuildRecord",
+  "description": "Structured record of one LaTeX build-repair cycle: environment, exact commands, pass convergence, diagnosed errors, applied fixes, package/font inventory, and reproducibility notes. Written by src/build.py (automated part) and completed by the agent (errors_fixed, template, reproducibility_notes).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "jobname",
+    "main_file",
+    "engine",
+    "distro",
+    "engine_version",
+    "converged",
+    "error_count",
+    "errors",
+    "warnings",
+    "packages",
+    "fonts",
+    "commands",
+    "passes",
+    "errors_fixed",
+    "reproducibility"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Version of this schema; build.py writes '1.0'.",
+      "enum": ["1.0"]
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "UTC timestamp of report generation, ISO 8601.",
+      "format": "date-time"
+    },
+    "case_id": {
+      "type": "string",
+      "description": "Optional originating case identifier when the record is embedded in a case result."
+    },
+    "jobname": {
+      "type": "string",
+      "description": "Basename of the main file without extension.",
+      "minLength": 1
+    },
+    "main_file": {
+      "type": "string",
+      "description": "Path of the main .tex file relative to the project directory.",
+      "minLength": 1
+    },
+    "engine": {
+      "type": "string",
+      "description": "TeX engine used for the final passes.",
+      "enum": ["pdflatex", "xelatex", "lualatex"]
+    },
+    "distro": {
+      "type": "string",
+      "description": "TeX distribution and release, e.g. 'TeX Live 2023/Debian' or 'MiKTeX 24.1'."
+    },
+    "engine_version": {
+      "type": "string",
+      "description": "First line of '<engine> --version'."
+    },
+    "latexmk_version": {
+      "type": "string",
+      "description": "latexmk --version output when latexmk was used."
+    },
+    "bib_tool": {
+      "type": ["string", "null"],
+      "description": "Bibliography tool used (bibtex, biber) or null.",
+      "enum": ["bibtex", "biber", null]
+    },
+    "template": {
+      "type": "object",
+      "description": "Template/class information for reproducibility.",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "description": "Class file basename, e.g. 'IEEEtran.cls'." },
+        "version": { "type": "string", "description": "Version string from the .log 'Document Class:' line, if reported." },
+        "date": { "type": "string", "description": "Class date from the .log, if reported." },
+        "source": { "type": "string", "description": "Where the class file came from: 'system', 'project_dir', 'downloaded', or 'unknown'." },
+        "engine_required": {
+          "type": ["string", "null"],
+          "description": "Engine the template requires (pdflatex/xelatex/lualatex) when known; null when not specified."
+        }
+      }
+    },
+    "converged": {
+      "type": "boolean",
+      "description": "True when: no error lines, no 'Rerun to get ...' message, and no undefined/multiply-defined reference or citation remains after the aux files stabilised."
+    },
+    "rerun_needed": {
+      "type": "boolean",
+      "description": "True when the final log still requests another pass."
+    },
+    "error_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of distinct fatal error diagnostics in the final log."
+    },
+    "warning_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of distinct non-fatal warnings in the final log."
+    },
+    "broken_reference_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of remaining undefined/multiply-defined reference or citation warnings."
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "line", "message", "category"],
+        "properties": {
+          "file": { "type": "string", "description": "File where the error was reported; '<main>' when the engine gave no file." },
+          "line": { "type": "integer", "minimum": 0, "description": "1-based line; 0 when the engine gave no line." },
+          "message": { "type": "string", "description": "Verbatim diagnostic message." },
+          "category": {
+            "type": "string",
+            "description": "Taxonomy category driving the fix decision tree.",
+            "enum": [
+              "MISSING_CLASS", "MISSING_PACKAGE", "MISSING_FONT",
+              "UNDEFINED_CONTROL_SEQUENCE", "UNDEFINED_REFERENCE", "UNDEFINED_CITATION",
+              "MULTIPLY_DEFINED_LABEL", "BAD_MATH", "TABLE_OVERFLOW", "RUNAWAY_ARGUMENT",
+              "FILE_ENDED_SCANNING", "CAPACITY_EXCEEDED", "EMERGENCY_STOP", "OTHER"
+            ]
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "message"],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "UNDEFINED_REFERENCE", "UNDEFINED_CITATION", "MULTIPLY_DEFINED_LABEL",
+              "OVERFULL", "UNDERFULL", "RERUN", "BIBTOOL_ERROR"
+            ]
+          },
+          "message": { "type": "string" },
+          "hint": { "type": "string" }
+        }
+      }
+    },
+    "packages": {
+      "type": "array",
+      "description": "Packages loaded during the final pass, with version and date from the .log.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "date": { "type": "string", "description": "YYYY/MM/DD from the log." }
+        }
+      }
+    },
+    "fonts": {
+      "type": "array",
+      "description": "Font files embedded or declared, from the .log.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "description": "Font filename or TeX font specifier." },
+          "kind": { "type": "string", "enum": ["file", "declared"] }
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "description": "Every external command actually executed, in order, with exit code and duration.",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["command", "exit_code"],
+        "properties": {
+          "command": { "type": "string" },
+          "exit_code": { "type": "integer" },
+          "duration_s": { "type": "number", "minimum": 0 },
+          "desc": { "type": "string" }
+        }
+      }
+    },
+    "passes": {
+      "type": "array",
+      "description": "Summary of each compile pass (engine or bibliography tool).",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["command", "exit_code"],
+        "properties": {
+          "desc": { "type": "string" },
+          "tool": { "type": "string" },
+          "command": { "type": "string" },
+          "exit_code": { "type": "integer" },
+          "duration_s": { "type": "number" }
+        }
+      }
+    },
+    "errors_fixed": {
+      "type": "array",
+      "description": "Agent-authored fix log: every applied repair with before/after evidence.",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["file", "line", "category", "fix"],
+        "properties": {
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 0 },
+          "category": { "type": "string" },
+          "before": { "type": "string", "description": "Snippet of the offending source before the fix." },
+          "fix": { "type": "string", "description": "Exact change applied." },
+          "after": { "type": "string", "description": "Verification evidence: error gone / warning count reduced / pass count." }
+        }
+      }
+    },
+    "aux_snapshot": {
+      "type": "object",
+      "description": "md5 of each auxiliary file at end of build; null when the file does not exist.",
+      "additionalProperties": false,
+      "properties": {
+        ".aux": { "type": ["string", "null"] },
+        ".toc": { "type": ["string", "null"] },
+        ".lof": { "type": ["string", "null"] },
+        ".lot": { "type": ["string", "null"] },
+        ".bbl": { "type": ["string", "null"] },
+        ".out": { "type": ["string", "null"] }
+      }
+    },
+    "pdf_bytes": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Size of the produced PDF in bytes, or null when no PDF was produced."
+    },
+    "reproducibility": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["exact_commands", "reproducibility_notes"],
+      "properties": {
+        "exact_commands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Exact ordered command lines a third party must run from the project directory."
+        },
+        "clean_rebuild_advised": {
+          "type": "boolean",
+          "description": "Whether to verify by deleting aux files and rebuilding."
+        },
+        "note": { "type": "string" },
+        "reproducibility_notes": {
+          "type": "string",
+          "description": "Human-written note: template/package/font versions, any substitution, and any step that cannot be automated."
+        }
+      }
+    }
+  }
+}

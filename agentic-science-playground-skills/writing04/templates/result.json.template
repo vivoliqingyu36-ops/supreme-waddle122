@@ -1,0 +1,74 @@
+{
+  "case_id": "<必填：来自 /input/case.json 的 case_id>",
+  "status": "success | partial | failed",
+  "<output_contract 要求的每个字段原样放在这里，键名与类型必须与 case.json.output_contract 完全一致>": "...",
+  "citation": {
+    "schema_version": "1.0.0",
+    "references": [
+      {
+        "key": "<唯一稳定键>",
+        "title": "<题名>",
+        "title_original": null,
+        "language": "zh|en|mixed|other",
+        "authors": [{ "family": "<姓>", "given": "<名>" }],
+        "year": "2024",
+        "type": "journal-article|conference|book|book-chapter|thesis|report|preprint|web|other",
+        "venue": "<刊名/会议/出版社>",
+        "volume": null,
+        "issue": null,
+        "pages": null,
+        "doi": null,
+        "url": null,
+        "version": "preprint|published|unknown",
+        "source_db": "BibTeX|RIS|EndNote|CNKI|Crossref|PubMed|manual",
+        "provenance": ["<原始文件路径 + 原始条目 key>"],
+        "verification": {
+          "status": "verified|unverified|fabricated|ambiguous|unresolved",
+          "method": "doi_resolution|database_search|original_document_evidence|none",
+          "doi_queried": null,
+          "retrieved": { "title": null, "authors": null, "year": null, "venue": null },
+          "field_match": "exact|partial|mismatch|unknown",
+          "resolved_at": null,
+          "note": null
+        }
+      }
+    ],
+    "claim_mappings": [
+      {
+        "claim_id": "claim-001",
+        "claim_text": "<被支撑的那句话，原句引用>",
+        "location": { "section": "<节>", "paragraph_id": null, "sentence_index": null, "char_offset": null },
+        "citation_keys": ["<ReferenceRecord.key>"],
+        "citation_form": "numeric|author_year|footnote|none",
+        "relation": "supports|method_basis|comparison|definition|contradicts|data_source|reports",
+        "evidence_quote": "<被引文献原文片段，查不到则为 null>",
+        "evidence_location": "<DOI/页码/章节>",
+        "claim_match": "matches|partial|mismatch|unknown",
+        "unsupported": false,
+        "needs_human": false,
+        "notes": null
+      }
+    ],
+    "dedup_decisions": [
+      { "verdict": "same_work|candidate_merge|ambiguous|different_work", "confidence": 0.95, "reason": "<命中哪些字段>", "a_key": null, "b_key": null, "title_similarity": null }
+    ],
+    "issues": [
+      { "severity": "error|warning|info", "kind": "<见 schema CitationIssueReport.kind>", "location": null, "message": "<处置说明>" }
+    ]
+  },
+  "uncertainty": [
+    { "message": "<无法判断/证据不足的说明>", "location": "<稿件位置>" }
+  ],
+  "human_review": [
+    { "message": "<candidate_merge / mismatch / unsupported / DOI 失败等>", "location": null, "action": "<建议人工动作>" }
+  ],
+  "change_log": [
+    { "action": "insert|delete|move|merge|correct|renumber", "before": "<原文/原编号>", "after": "<新文/新编号>", "reason": "<依据>" }
+  ],
+  "artifacts": {
+    "manuscript": "/app/output/manuscript.<ext>",
+    "refs_synced": "/app/output/refs_synced.<ext>",
+    "source_map": "/app/output/source_map.json",
+    "previews": []
+  }
+}

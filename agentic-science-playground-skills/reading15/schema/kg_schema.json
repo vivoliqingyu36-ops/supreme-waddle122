@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/kg_schema.json",
+  "title": "Literature Knowledge Graph schema (reading15)",
+  "description": "Schema for evidence-bound nodes/edges, cross-paper alignments, queries and result.json of the literature knowledge-graph construction skill. Locations use JATS paragraph IDs (never PDF page numbers). Every substantive node and edge carries source_id + paragraph_id + quote.",
+  "type": "object",
+  "required": ["case_id", "status", "sources", "nodes", "edges"],
+  "properties": {
+    "case_id": {"type": "string", "description": "Copied verbatim from /input/case.json."},
+    "status": {"$ref": "#/definitions/status"},
+    "sources": {"type": "array", "items": {"$ref": "#/definitions/source"}, "minItems": 1},
+    "nodes": {"type": "array", "items": {"$ref": "#/definitions/node"}},
+    "edges": {"type": "array", "items": {"$ref": "#/definitions/edge"}},
+    "alignments": {"type": "array", "items": {"$ref": "#/definitions/alignment"}},
+    "queries": {"type": "array", "items": {"$ref": "#/definitions/query_result"}},
+    "non_edges": {"type": "array", "items": {"$ref": "#/definitions/non_edge"}, "description": "Co-occurrence/speculation/inferred claims deliberately NOT promoted to edges."},
+    "unreported": {"type": "array", "items": {"$ref": "#/definitions/unreported"}},
+    "conflicts": {"type": "array", "items": {"$ref": "#/definitions/conflict"}},
+    "uncertainty": {"type": "array", "items": {"$ref": "#/definitions/uncertainty"}},
+    "change_log": {"type": "array", "items": {"$ref": "#/definitions/change_entry"}}
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "enum": ["success", "partial", "failed"],
+      "description": "success = full graph with >=3 executed queries; partial = some source missing/unparseable; failed = no usable text."
+    },
+    "entity_type": {
+      "type": "string",
+      "enum": ["researcher", "material", "method", "task", "metric", "conclusion"],
+      "description": "researcher=person/group/institution; material=physical sample/reagent/model instance/dataset; method=procedure/algorithm; task=research goal; metric=measured/evaluation quantity; conclusion=finding/claim."
+    },
+    "relation_type": {
+      "type": "string",
+      "enum": ["USES", "COMPARES", "OUTPERFORMS", "SUPPORTS", "CONTRADICTS", "SAME_AS", "DISTINCT_FROM"],
+      "description": "USES=uses/applies; COMPARES=compares; OUTPERFORMS=superior to (must state metric+conditions); SUPPORTS=evidence supports conclusion; CONTRADICTS=contradicts; SAME_AS=cross-paper alignment merge (needs justification); DISTINCT_FROM=explicit keep-separate (needs conflict_note)."
+    },
+    "evidence_strength": {
+      "type": "string",
+      "enum": ["direct", "paraphrase", "inferred", "cooccurrence", "speculation"],
+      "description": "direct=stated verbatim in source; paraphrase=author relays others/review (weak, annotate); inferred=contextual (do NOT promote to edge); cooccurrence=co-occurrence only (do NOT promote); speculation=hedged/maybe (do NOT promote)."
+    },
+    "source": {
+      "type": "object",
+      "required": ["source_id", "title", "doi", "authors"],
+      "properties": {
+        "source_id": {"type": "string", "description": "Unique short id, e.g. 'primary'/'secondary' or stable DOI prefix."},
+        "title": {"type": "string"},
+        "doi": {"type": "string"},
+        "authors": {"type": "array", "items": {"type": "string"}},
+        "source_hash": {"type": "string"},
+        "license": {"type": "string"},
+        "status": {"type": "string", "enum": ["ok", "missing", "unparseable"], "default": "ok"},
+        "note": {"type": "string"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["source_id", "paragraph_id", "quote"],
+      "properties": {
+        "source_id": {"type": "string"},
+        "paragraph_id": {"type": "string", "description": "JATS paragraph ID verbatim; 'unlocated' only when the material omits it. Never a PDF page number."},
+        "quote": {"type": "string", "description": "Verbatim, linearized short quote from the source; must be grep-able in the material file."},
+        "strength": {"$ref": "#/definitions/evidence_strength", "default": "direct"},
+        "note": {"type": "string"}
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "type", "canonical_name", "source_id", "paragraph_id", "quote"],
+      "properties": {
+        "id": {"type": "string", "description": "Globally unique; recommend {source_id}.{entity_type}.{seq}."},
+        "type": {"$ref": "#/definitions/entity_type"},
+        "canonical_name": {"type": "string"},
+        "source_id": {"type": "string"},
+        "paragraph_id": {"type": "string"},
+        "quote": {"type": "string"},
+        "aliases": {"type": "array", "items": {"type": "string"}, "default": []},
+        "strength": {"$ref": "#/definitions/evidence_strength", "default": "direct"},
+        "merge_of": {"type": "array", "items": {"type": "string"}, "description": "Temporary/merged node ids collapsed into this node."},
+        "distinct_from": {"type": "array", "items": {"type": "string"}, "description": "Node ids judged different despite surface-name similarity."},
+        "note": {"type": "string"}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["id", "type", "source", "target", "direction", "source_id", "paragraph_id", "quote", "strength"],
+      "properties": {
+        "id": {"type": "string", "description": "Globally unique edge id, e.g. E001."},
+        "type": {"$ref": "#/definitions/relation_type"},
+        "source": {"type": "string", "description": "Head node id (must exist in nodes)."},
+        "target": {"type": "string", "description": "Tail node id (must exist in nodes)."},
+        "direction": {"type": "string", "enum": ["out", "in"], "description": "out = source -> target as written; in = relation reads target -> source (use only if original phrasing is reversed)."},
+        "source_id": {"type": "string"},
+        "paragraph_id": {"type": "string"},
+        "quote": {"type": "string"},
+        "strength": {"$ref": "#/definitions/evidence_strength"},
+        "conditions": {"type": "string", "default": "not stated", "description": "Applicability conditions (dataset/sample/parameters)."},
+        "note": {"type": "string"}
+      }
+    },
+    "alignment": {
+      "type": "object",
+      "required": ["decision"],
+      "properties": {
+        "decision": {"type": "string", "enum": ["merge", "keep_separate"]},
+        "canonical_id": {"type": "string", "description": "For merge: surviving node id."},
+        "merged_ids": {"type": "array", "items": {"type": "string"}},
+        "ids": {"type": "array", "items": {"type": "string"}, "description": "For keep_separate: the distinct node ids."},
+        "justification": {"type": "string", "description": "For merge: string-alias correspondence AND same-referent evidence."},
+        "conflict_note": {"type": "string", "description": "For keep_separate: why similarity is not identity."},
+        "evidence": {"type": "array", "items": {"$ref": "#/definitions/evidence"}}
+      }
+    },
+    "query_type": {
+      "type": "string",
+      "enum": ["neighborhood", "trace", "path", "node_by_name", "node_by_type", "edges_by_type"]
+    },
+    "query": {
+      "type": "object",
+      "required": ["id", "type", "params"],
+      "properties": {
+        "id": {"type": "string"},
+        "question": {"type": "string"},
+        "type": {"$ref": "#/definitions/query_type"},
+        "params": {"type": "object", "description": "neighborhood:{node,max_depth}; trace:{element}; path:{from,to,max_hops}; node_by_name:{text,limit}; node_by_type:{entity_type}; edges_by_type:{relation}."}
+      }
+    },
+    "query_result": {
+      "type": "object",
+      "required": ["id", "type", "status", "result_nodes", "result_edges", "evidence"],
+      "properties": {
+        "id": {"type": "string"},
+        "question": {"type": "string"},
+        "type": {"$ref": "#/definitions/query_type"},
+        "params": {"type": "object"},
+        "status": {"type": "string", "enum": ["answered", "empty"]},
+        "result_nodes": {"type": "array", "items": {"$ref": "#/definitions/node"}},
+        "result_edges": {"type": "array", "items": {"$ref": "#/definitions/edge"}},
+        "evidence": {"type": "array", "items": {"$ref": "#/definitions/evidence"}},
+        "empty_reason": {"type": "string", "description": "Required when status=empty."}
+      }
+    },
+    "non_edge": {
+      "type": "object",
+      "required": ["claim", "strength", "reason"],
+      "properties": {
+        "claim": {"type": "string", "description": "The would-be relation that was rejected."},
+        "strength": {"type": "string", "enum": ["cooccurrence", "speculation", "inferred"]},
+        "reason": {"type": "string"},
+        "source_id": {"type": "string"},
+        "paragraph_id": {"type": "string"},
+        "quote": {"type": "string"}
+      }
+    },
+    "unreported": {
+      "type": "object",
+      "required": ["subject", "what_missing"],
+      "properties": {
+        "subject": {"type": "string"},
+        "what_missing": {"type": "string"},
+        "note": {"type": "string"}
+      }
+    },
+    "conflict": {
+      "type": "object",
+      "required": ["subject", "source_a", "source_b"],
+      "properties": {
+        "subject": {"type": "string"},
+        "source_a": {"$ref": "#/definitions/evidence"},
+        "source_b": {"$ref": "#/definitions/evidence"},
+        "note": {"type": "string", "description": "Both kept side by side; no silent deletion."}
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "required": ["subject", "level"],
+      "properties": {
+        "subject": {"type": "string"},
+        "note": {"type": "string"},
+        "level": {"type": "string", "enum": ["low", "medium", "high"]}
+      }
+    },
+    "change_entry": {
+      "type": "object",
+      "required": ["step", "action"],
+      "properties": {
+        "step": {"type": "string"},
+        "action": {"type": "string"},
+        "reason": {"type": "string"}
+      }
+    }
+  }
+}
